@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: TRDDK documentation
+    url: https://github.com/Saja12344/tardadi/blob/main/README.md
+    about: Start with README and docs/ before opening an issue
+  - name: Security concern
+    url: mailto:support@tardadi.com
+    about: Report security issues privately (do not post secrets in GitHub)
