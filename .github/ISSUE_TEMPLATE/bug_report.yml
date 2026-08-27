@@ -1,0 +1,79 @@
+name: Bug report
+description: Report a defect in TRDDK (Admin, Driver, Passenger, or API)
+title: "[bug]: "
+labels: ["bug", "needs-verification"]
+body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: Affected application
+      options:
+        - Admin (Next.js)
+        - Driver (Flutter)
+        - Passenger (Flutter)
+        - Backend / Cloud Functions
+        - Firestore / Firebase
+        - CI / Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local development
+        - Firebase App Hosting (production)
+        - Cloud Functions (production)
+        - iOS device/simulator
+        - Android device/emulator
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps. Remove passwords and tokens from logs.
+      placeholder: |
+        1. Open Admin → Trips
+        2. Select business X
+        3. Observe map tiles
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / network errors
+      description: Paste redacted logs or HTTP status codes only.
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag images here if helpful.
+
+  - type: checkboxes
+    id: firebase_project
+    attributes:
+      label: Firebase project
+      options:
+        - label: Confirmed issue is on project **trddk-54c45** (not a legacy project)
+          required: true
