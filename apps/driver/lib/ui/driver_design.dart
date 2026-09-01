@@ -19,8 +19,9 @@ class DriverColors {
 }
 
 class DriverAssets {
-  static const wordmark = 'assets/images/tardadi_wordmark.png';
-  static const mark = 'assets/images/tardadi_mark.png';
+  static const fullLockup = 'assets/images/logo_full.png';
+  static const wordmark = 'assets/images/trddk_wordmark.png';
+  static const mark = 'assets/images/logo_icon.png';
   static const vehicleBus = 'assets/images/vehicles/bus.png';
   static const vehicleGolf = 'assets/images/vehicles/golf.png';
   static const vehicleVan = 'assets/images/vehicles/van.png';

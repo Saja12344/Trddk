@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tardadi_core/tardadi_core.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/route_list_item.dart';
 import '../services/bus_arrival_notifications.dart';
 import '../services/passenger_api.dart';
+import '../ui/trddk_typography.dart';
 import '../widgets/left_back_button.dart';
 import '../widgets/onboarding/frosted_glass.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
@@ -26,12 +26,15 @@ class RouteMapScreen extends StatefulWidget {
 }
 
 class _RouteMapScreenState extends State<RouteMapScreen> {
-  final _api = createPassengerApi();
   final _notifications = BusArrivalNotificationService.instance;
   RouteLiveSnapshot? _snapshot;
   List<BusArrivalItem> _buses = [];
   var _loading = true;
   Timer? _refreshTimer;
+
+  TardadiApi get _api => createPassengerApi(
+        organizationId: widget.route.businessId,
+      );
 
   @override
   void initState() {
@@ -54,7 +57,10 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
 
   Future<void> _loadLive() async {
     try {
-      final snapshot = await _api.getRouteLive(widget.route.routeId);
+      final snapshot = await _api.getRouteLive(
+        widget.route.routeId,
+        organizationId: widget.route.businessId,
+      );
       if (!mounted) return;
       final buses = snapshot.buses
           .map(
@@ -188,7 +194,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
                       ? Center(
                           child: Text(
                             l10n.noLiveBuses,
-                            style: GoogleFonts.ubuntu(
+                            style: TrddkTypography.text(
                               color: OnboardingTheme.muted,
                               fontSize: 15,
                             ),
@@ -359,7 +365,7 @@ class _BusArrivalCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         l10n.vehicleLabel(item.vehicleType, item.name),
-                        style: GoogleFonts.ubuntu(
+                        style: TrddkTypography.text(
                           color: titleColor,
                           fontWeight: FontWeight.w700,
                           fontSize: 18,
@@ -445,7 +451,7 @@ class _LiveBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             l10n.liveBadge,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: Colors.white,
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -491,7 +497,7 @@ class _ArrivalDetailChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: textColor,
               fontSize: 13,
               fontWeight: FontWeight.w600,

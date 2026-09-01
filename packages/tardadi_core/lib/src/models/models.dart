@@ -39,6 +39,7 @@ class RouteModel {
     this.activeBusCount,
     this.liveBusCount,
     this.accessMode = 'public',
+    this.businessId,
   });
 
   final String routeId;
@@ -54,6 +55,7 @@ class RouteModel {
   final int? activeBusCount;
   final int? liveBusCount;
   final String accessMode;
+  final String? businessId;
 
   bool get isBusiness => accessMode == 'private';
 
@@ -74,6 +76,8 @@ class RouteModel {
       activeBusCount: (json['activeBusCount'] as num?)?.toInt(),
       liveBusCount: (json['liveBusCount'] as num?)?.toInt(),
       accessMode: json['accessMode'] as String? ?? 'public',
+      businessId: json['businessId'] as String? ??
+          json['organizationId'] as String?,
     );
   }
 }
@@ -177,6 +181,7 @@ class DriverModel {
     this.assignedBusId,
     required this.status,
     this.nameAr,
+    this.businessId,
   });
 
   final String driverId;
@@ -187,6 +192,7 @@ class DriverModel {
   final String? assignedBusId;
   final String status;
   final String? nameAr;
+  final String? businessId;
 
   factory DriverModel.fromJson(Map<String, dynamic> json) {
     return DriverModel(
@@ -198,6 +204,8 @@ class DriverModel {
       assignedBusId: json['assignedBusId'] as String?,
       status: json['status'] as String? ?? 'active',
       nameAr: json['nameAr'] as String?,
+      businessId: json['businessId'] as String? ??
+          json['organizationId'] as String?,
     );
   }
 }

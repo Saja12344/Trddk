@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Tardadi</string>
+	<string>TRDDK</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -49,6 +49,8 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>GMSApiKey</key>
+	<string>AIzaSyDF72v_3g4nkc7YUIIRkLLmlzPsDBYBHbI</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>نحتاج موقعك لعرض الباصات القريبة منك</string>
 	<key>NSUserNotificationUsageDescription</key>

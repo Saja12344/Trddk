@@ -1,9 +1,19 @@
 library tardadi_core;
 
 export 'src/api/tardadi_api.dart';
+export 'src/api/passenger_auth_models.dart';
 export 'src/config/app_config.dart';
+export 'src/config/firebase_project.dart';
 export 'src/models/models.dart';
+export 'src/brand/trddk_brand_assets.dart';
+export 'src/brand/trddk_brand_splash.dart';
+export 'src/brand/trddk_brand_widgets.dart';
+export 'src/maps/trddk_google_route_map.dart';
+export 'src/config/google_maps_config.dart';
 export 'src/theme/brand.dart';
+export 'src/theme/design_tokens.dart';
+export 'src/theme/map_colors.dart';
 export 'src/utils/station_count.dart';
 export 'src/utils/eta_utils.dart';
 export 'src/utils/route_polyline.dart';
+export 'src/utils/heading_utils.dart';

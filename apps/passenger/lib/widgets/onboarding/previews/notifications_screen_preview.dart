@@ -147,7 +147,7 @@ class _NotificationBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Tardadi',
+                  'TRDDK',
                   style: OnboardingTypography.label(
                     fontSize: 10 * scale,
                     color: const Color(0xFF8E8E93),
@@ -196,7 +196,7 @@ class _SavedRouteRow extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Diriyah · Gate 2',
+                  'Bus 12 · Gate 2',
                   style: OnboardingTypography.body(
                     fontSize: 10 * scale,
                     color: OnboardingTheme.muted,

@@ -5,9 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:tardadi_core/tardadi_core.dart';
 
-import '../l10n/app_localizations.dart';
 import '../ui/driver_map_config.dart';
-import '../utils/arabic_display.dart';
 
 class DriverRouteMap extends StatefulWidget {
   const DriverRouteMap({
@@ -112,26 +110,42 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
     bool dashed = false,
   }) {
     if (points.length < 2) return [];
-    final border = Polyline(
-      points: points,
-      color: color.withValues(alpha: 0.35),
-      strokeWidth: 9,
-      strokeCap: StrokeCap.round,
-      strokeJoin: StrokeJoin.round,
-    );
-    final main = Polyline(
-      points: points,
-      color: color,
-      strokeWidth: 5.5,
-      strokeCap: StrokeCap.round,
-      strokeJoin: StrokeJoin.round,
-      pattern: dashed ? StrokePattern.dashed(segments: [14, 10]) : const StrokePattern.solid(),
-    );
-    return [border, main];
+    return [
+      Polyline(
+        points: points,
+        color: color.withValues(alpha: 0.35),
+        strokeWidth: 9,
+        strokeCap: StrokeCap.round,
+        strokeJoin: StrokeJoin.round,
+      ),
+      Polyline(
+        points: points,
+        color: color,
+        strokeWidth: 5.5,
+        strokeCap: StrokeCap.round,
+        strokeJoin: StrokeJoin.round,
+        pattern: dashed
+            ? StrokePattern.dashed(segments: [14, 10])
+            : const StrokePattern.solid(),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
+    if (TrddkGoogleMapsConfig.isConfigured) {
+      return TrddkGoogleRouteMap(
+        route: widget.route,
+        stops: widget.stops,
+        routeColor: widget.routeColor,
+        driverPosition: widget.driverPosition,
+        driverHeading: widget.driverHeading,
+        followDriver: widget.followDriver,
+        borderRadius: 0,
+        padding: widget.followDriver ? 80 : 48,
+      );
+    }
+
     final routePoints = resolveRoutePoints(widget.route, widget.stops);
     final driverLatLng = widget.driverPosition == null
         ? null
@@ -140,12 +154,11 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
             widget.driverPosition!.longitude,
           );
 
-    // Match map_screen off-route threshold — don't draw a straight connector
-    // when GPS is far from the route (common in simulators with default location).
     const onRouteThresholdMeters = 80.0;
     final onRoute = driverLatLng == null ||
         routePoints.isEmpty ||
-        distanceToRouteMeters(routePoints, driverLatLng) <= onRouteThresholdMeters;
+        distanceToRouteMeters(routePoints, driverLatLng) <=
+            onRouteThresholdMeters;
 
     final splitIndex = !onRoute || driverLatLng == null || routePoints.isEmpty
         ? 0
@@ -169,10 +182,9 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
           ]
         : routePoints;
 
-    final initialCenter = driverLatLng ??
-        (routePoints.isNotEmpty
-            ? routePoints.first
-            : const LatLng(24.7136, 46.6753));
+    final initialCenter = routePoints.isNotEmpty
+        ? routePoints.first
+        : (driverLatLng ?? const LatLng(24.7136, 46.6753));
 
     final polylines = <Polyline>[
       ..._googleStyleLine(
@@ -193,7 +205,8 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
       mapController: _mapController,
       options: MapOptions(
         initialCenter: initialCenter,
-        initialZoom: 15,
+        initialZoom: 14,
+        backgroundColor: TrddkMapColors.navy,
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
         ),
@@ -205,11 +218,10 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
           subdomains: DriverMapConfig.tileSubdomains,
           userAgentPackageName: 'com.tardadi.tardadiDriver',
         ),
-        if (polylines.isNotEmpty)
-          PolylineLayer(polylines: polylines),
+        if (polylines.isNotEmpty) PolylineLayer(polylines: polylines),
         MarkerLayer(
           markers: [
-            ..._endpointMarkers(context),
+            ..._routeMarkers(routePoints),
             if (driverLatLng != null) _driverMarker(driverLatLng),
           ],
         ),
@@ -217,100 +229,121 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
     );
   }
 
-  List<Marker> _endpointMarkers(BuildContext context) {
-    final l10n = context.l10n;
+  List<Marker> _routeMarkers(List<LatLng> routePoints) {
     final markers = <Marker>[];
     final from = widget.route.fromLocation;
     final to = widget.route.toLocation;
 
+    if (routePoints.length >= 2) {
+      markers.add(_startDirectionMarker(routePoints));
+    }
+
     if (from != null) {
-      final startLabel = from.address.trim().isNotEmpty
-          ? context.displayPlaceName(
-              from.address,
-              nameAr: from.addressAr,
-            )
-          : l10n.mapStart;
       markers.add(
-        _routeEndpointMarker(
-          point: LatLng(from.latitude, from.longitude),
-          label: startLabel,
-          color: DriverMapConfig.startGreen,
-          filled: true,
+        _pinMarker(
+          LatLng(from.latitude, from.longitude),
+          DriverMapConfig.startGreen,
         ),
       );
     }
     if (to != null) {
-      final endLabel = to.address.trim().isNotEmpty
-          ? context.displayPlaceName(
-              to.address,
-              nameAr: to.addressAr,
-            )
-          : l10n.mapEnd;
       markers.add(
-        _routeEndpointMarker(
-          point: LatLng(to.latitude, to.longitude),
-          label: endLabel,
-          color: DriverMapConfig.endRed,
-          filled: true,
+        _pinMarker(
+          LatLng(to.latitude, to.longitude),
+          DriverMapConfig.endRed,
         ),
       );
     }
+
+    for (final stop in widget.stops) {
+      markers.add(
+        _pinMarker(
+          LatLng(stop.latitude, stop.longitude),
+          widget.routeColor,
+          label: '${stop.sequenceNo}',
+        ),
+      );
+    }
+
     return markers;
   }
 
-  Marker _routeEndpointMarker({
-    required LatLng point,
-    required String label,
-    required Color color,
-    required bool filled,
-  }) {
+  Marker _startDirectionMarker(List<LatLng> routePoints) {
+    final start = routePoints.first;
+    final next = routePoints.length > 1 ? routePoints[1] : start;
+    final bearing = headingBetween(
+      fromLat: start.latitude,
+      fromLng: start.longitude,
+      toLat: next.latitude,
+      toLng: next.longitude,
+    );
+
+    return Marker(
+      point: start,
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      child: Transform.rotate(
+        angle: (bearing - 45) * math.pi / 180,
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: DriverMapConfig.startGreen,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.navigation_rounded,
+            color: Colors.white,
+            size: 18,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Marker _pinMarker(LatLng point, Color color, {String? label}) {
     return Marker(
       point: point,
-      width: 54,
-      height: 68,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x66000000),
-                  blurRadius: 6,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
+      width: 24,
+      height: 24,
+      alignment: Alignment.center,
+      child: label == null
+          ? Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
                 color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+              ),
+            )
+          : Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: 2.5),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: filled ? color : Colors.transparent,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x66000000),
-                  blurRadius: 4,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -320,6 +353,7 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
       point: point,
       width: 44,
       height: 44,
+      alignment: Alignment.center,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -340,13 +374,6 @@ class _DriverRouteMapState extends State<DriverRouteMap> {
                 color: const Color(0xFF4285F4),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 3),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x44000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
-                  ),
-                ],
               ),
             ),
           ),

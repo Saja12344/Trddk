@@ -71,21 +71,25 @@ class _HomeScreenPreviewState extends State<HomeScreenPreview>
                 interval: OnboardingPreviewMotion.step(0),
                 child: Row(
                   children: [
-                    TardadiLogoIcon(size: 18 * _s),
-                    SizedBox(width: 8 * _s),
+                    SizedBox(
+                      width: 18 * _s,
+                      child: TardadiLogoIcon(size: 18 * _s),
+                    ),
                     Expanded(
-                      child: Text(
-                        'Tardadi',
-                        style: OnboardingTypography.display(
-                          fontSize: 16 * _s,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      child: Center(
+                        child: TrddkWordmark(height: 16 * _s),
                       ),
                     ),
-                    Icon(
-                      Icons.menu_rounded,
-                      color: OnboardingTheme.white.withValues(alpha: 0.85),
-                      size: 18 * _s,
+                    SizedBox(
+                      width: 18 * _s,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Icon(
+                          Icons.menu_rounded,
+                          color: OnboardingTheme.white.withValues(alpha: 0.85),
+                          size: 18 * _s,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -108,8 +112,8 @@ class _HomeScreenPreviewState extends State<HomeScreenPreview>
                 interval: OnboardingPreviewMotion.step(3),
                 child: _MiniRouteCard(
                   scale: _s,
-                  name: 'Diriyah',
-                  meta: '2 live / 4 · 8 Stations',
+                  name: 'Bus 12',
+                  meta: '2 live / 4 · Route A',
                   highlighted: true,
                 ),
               ),
@@ -119,8 +123,8 @@ class _HomeScreenPreviewState extends State<HomeScreenPreview>
                 interval: OnboardingPreviewMotion.step(4),
                 child: _MiniRouteCard(
                   scale: _s,
-                  name: 'Roshn',
-                  meta: 'Scheduled · 3 Buses · 6 Stations',
+                  name: 'Bus 07',
+                  meta: 'Scheduled · Line B · 6 stops',
                 ),
               ),
             ],
@@ -158,7 +162,7 @@ class _MiniSearchBar extends StatelessWidget {
               ),
               SizedBox(width: 8 * scale),
               Text(
-                'Station name',
+                'Bus number',
                 style: OnboardingTypography.body(
                   fontSize: 12 * scale,
                   color: OnboardingTheme.white.withValues(alpha: 0.52),

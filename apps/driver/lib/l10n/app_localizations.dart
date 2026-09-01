@@ -35,7 +35,7 @@ class AppLocalizations {
 
   static final Map<String, Map<String, String>> _strings = {
     'en': {
-      'appTitle': 'Tardadi — Driver',
+      'appTitle': 'TRDDK — Driver',
       'preferences': 'Preferences',
       'language': 'Language',
       'notifications': 'Notifications',
@@ -66,8 +66,33 @@ class AppLocalizations {
       'codeResent': 'A new code was sent',
       'enterOtp': 'Enter the 6-digit verification code',
       'demoOtpHint': 'Temporary verification code is 000000',
-      'tardadi': 'Tardadi',
-      'distanceFromStart': 'Your distance from starting point',
+      'tardadi': 'TRDDK',
+      'loginTitle': 'Login',
+      'loginSubtitleCredentials':
+          'Only numbers registered in the database can access',
+      'loginSubtitlePassword': 'Enter your password',
+      'loginSubtitleSetup': 'Create your password from the email link',
+      'emailLabel': 'Email',
+      'passwordLabel': 'Password',
+      'emailHint': 'Enter your email',
+      'passwordHint': 'Enter your password',
+      'signIn': 'Login',
+      'signInAction': 'Sign in now',
+      'resendSetupLink': 'Resend link',
+      'changeEmail': 'Change email',
+      'forgotPassword': 'Forget password?',
+      'setupInstructions':
+          'Check your email and tap the link to create your password. When done, tap Sign in below.',
+      'enterEmail': 'Enter your email',
+      'enterEmailPassword': 'Enter email and password',
+      'setupLinkSent': 'Password setup link sent to your email.',
+      'resetEmailHint':
+          'If this email is registered, you will receive a reset link.',
+      'firstTimeSetup': 'First time? Send password setup link',
+      'noPasswordYet': 'First time here?',
+      'createPassword': 'Set up your account',
+      'enterPassword': 'Enter your password',
+      'distanceFromStart': 'Distance from start',
       'start': 'Start',
       'youCanStart': 'You can start',
       'goCloserToStart': 'Go closer to start',
@@ -111,7 +136,7 @@ class AppLocalizations {
       'kilometers': '{value} km',
     },
     'ar': {
-      'appTitle': 'ترددي — سائق',
+      'appTitle': 'TRDDK — سائق',
       'preferences': 'التفضيلات',
       'language': 'اللغة',
       'notifications': 'التنبيهات',
@@ -142,8 +167,31 @@ class AppLocalizations {
       'codeResent': 'تم إرسال رمز جديد',
       'enterOtp': 'أدخل رمز التحقق المكوّن من 6 أرقام',
       'demoOtpHint': 'رمز التحقق المؤقت هو 000000',
-      'tardadi': 'ترددي',
-      'start': 'ابدأ',
+      'tardadi': 'TRDDK',
+      'loginTitle': 'تسجيل الدخول',
+      'loginSubtitleCredentials': 'البريد الإلكتروني وكلمة المرور',
+      'loginSubtitlePassword': 'أدخل كلمة المرور',
+      'loginSubtitleSetup': 'أنشئ كلمة المرور من الرابط في بريدك',
+      'emailLabel': 'البريد الإلكتروني',
+      'passwordLabel': 'كلمة المرور',
+      'emailHint': 'أدخل بريدك الإلكتروني',
+      'passwordHint': 'أدخل كلمة المرور',
+      'signIn': 'تسجيل الدخول',
+      'signInAction': 'تسجيل الدخول الآن',
+      'resendSetupLink': 'إعادة إرسال الرابط',
+      'changeEmail': 'تغيير البريد',
+      'forgotPassword': 'نسيت كلمة المرور؟',
+      'setupInstructions':
+          'تحقق من بريدك واضغط الرابط لإنشاء كلمة المرور. بعد الانتهاء، اضغط «تسجيل الدخول» بالأسفل.',
+      'enterEmail': 'أدخل البريد الإلكتروني',
+      'enterEmailPassword': 'أدخل البريد وكلمة المرور',
+      'setupLinkSent': 'تم إرسال رابط إنشاء كلمة المرور إلى بريدك.',
+      'resetEmailHint':
+          'إذا كان البريد مرتبطًا بحساب، فسيصل رابط الاستعادة.',
+      'firstTimeSetup': 'أول مرة؟ أرسل رابط إنشاء كلمة المرور',
+      'noPasswordYet': 'لم تعيّن كلمة مرور بعد؟',
+      'createPassword': 'إنشاء كلمة مرور',
+      'enterPassword': 'أدخل كلمة المرور',
       'youCanStart': 'يمكنك البدء',
       'goCloserToStart': 'اقترب من نقطة الانطلاق',
       'distanceFromStart': 'المسافة من نقطة الانطلاق',
@@ -233,6 +281,28 @@ class AppLocalizations {
   String get enterOtp => _t('enterOtp');
   String get demoOtpHint => _t('demoOtpHint');
   String get tardadi => _t('tardadi');
+  String get loginTitle => _t('loginTitle');
+  String get loginSubtitleCredentials => _t('loginSubtitleCredentials');
+  String get loginSubtitlePassword => _t('loginSubtitlePassword');
+  String get loginSubtitleSetup => _t('loginSubtitleSetup');
+  String get emailLabel => _t('emailLabel');
+  String get passwordLabel => _t('passwordLabel');
+  String get emailHint => _t('emailHint');
+  String get passwordHint => _t('passwordHint');
+  String get signIn => _t('signIn');
+  String get signInAction => _t('signInAction');
+  String get resendSetupLink => _t('resendSetupLink');
+  String get changeEmail => _t('changeEmail');
+  String get forgotPassword => _t('forgotPassword');
+  String get setupInstructions => _t('setupInstructions');
+  String get enterEmail => _t('enterEmail');
+  String get enterEmailPassword => _t('enterEmailPassword');
+  String get setupLinkSent => _t('setupLinkSent');
+  String get resetEmailHint => _t('resetEmailHint');
+  String get firstTimeSetup => _t('firstTimeSetup');
+  String get noPasswordYet => _t('noPasswordYet');
+  String get createPassword => _t('createPassword');
+  String get enterPassword => _t('enterPassword');
   String get distanceFromStart => _t('distanceFromStart');
   String get start => _t('start');
   String get youCanStart => _t('youCanStart');

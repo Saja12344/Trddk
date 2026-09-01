@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Tardadi Driver</string>
+	<string>TRDDK Driver</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,6 +47,8 @@
 			</array>
 		</dict>
 	</dict>
+	<key>GMSApiKey</key>
+	<string>AIzaSyDF72v_3g4nkc7YUIIRkLLmlzPsDBYBHbI</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>نحتاج موقعك لعرض الخريطة وتتبع الرحلة.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

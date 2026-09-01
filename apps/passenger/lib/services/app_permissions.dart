@@ -19,8 +19,6 @@ class AppPermissions {
     await LocalNotificationService.instance.initialize();
     await SchedulerBinding.instance.endOfFrame;
 
-    await _requestNativeNotificationPermission();
-
     if (!requestLocation) return;
 
     // iOS presents one system sheet at a time.
@@ -38,10 +36,6 @@ class AppPermissions {
     if (permission == LocationPermission.denied) {
       await Geolocator.requestPermission();
     }
-  }
-
-  static Future<bool> _requestNativeNotificationPermission() {
-    return LocalNotificationService.instance.requestPermission();
   }
 
   static Future<bool> hasNotificationPermission() {

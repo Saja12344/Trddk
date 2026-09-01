@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:tardadi_core/tardadi_core.dart';
 
 import '../../widgets/animated_brand_splash.dart';
-import '../../widgets/onboarding/onboarding_theme.dart';
 import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -27,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: OnboardingTheme.background,
+        backgroundColor: const Color(TrddkBrandAssets.splashNavy),
         body: AnimatedBrandSplash(onFinished: _finishSplash),
       ),
     );

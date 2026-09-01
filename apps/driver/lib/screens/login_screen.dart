@@ -1,11 +1,14 @@
-import 'dart:async';
-
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tardadi_core/tardadi_core.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/driver_api.dart';
+import '../services/firebase_auth_service.dart';
 import '../ui/driver_design.dart';
+import '../ui/trddk_brand_colors.dart';
+import '../ui/trddk_typography.dart';
 import 'loading_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -16,510 +19,655 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _phoneController = TextEditingController();
-  final _phoneFocusNode = FocusNode();
-
-  void _showPhoneKeyboard() {
-    _phoneFocusNode.requestFocus();
-    SystemChannels.textInput.invokeMethod<void>('TextInput.show');
-  }
-
-  void _continueToVerify() {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
-      DriverSnack.show(context, context.l10n.enterPhone);
-      return;
-    }
-
-    Navigator.of(context).push(
-      driverRoute(builder: (_) => VerifyScreen(phone: phone)),
-    );
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _showPhoneKeyboard();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    _phoneFocusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return _AuthScaffold(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(48, 36, 48, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              l10n.verifyYourNumber,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: DriverColors.navyPanel,
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              l10n.onlyRegisteredNumbers,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF55565D),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 46),
-            Text(
-              l10n.phoneNumber,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _PhoneField(
-              controller: _phoneController,
-              focusNode: _phoneFocusNode,
-              onTap: _showPhoneKeyboard,
-              hintText: l10n.enterPhoneNumber,
-            ),
-            const SizedBox(height: 46),
-            DriverButton(label: l10n.next, onPressed: _continueToVerify),
-            const SizedBox(height: 32),
-            Text(
-              l10n.needHelp,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF92949C),
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AuthScaffold extends StatelessWidget {
-  const _AuthScaffold({required this.child});
-
-  static const _contentWidth = 390.0;
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return DriverChrome(
-      bodyColor: DriverColors.softWhite,
-      child: Column(
-        children: [
-          const _AuthHeader(),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _contentWidth),
-                child: child,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class VerifyScreen extends StatefulWidget {
-  const VerifyScreen({super.key, required this.phone});
-
-  final String phone;
-
-  @override
-  State<VerifyScreen> createState() => _VerifyScreenState();
-}
-
-class _VerifyScreenState extends State<VerifyScreen> {
-  static const _demoCode = '000000';
-  static const _codeLength = 6;
-
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _emailFocusNode = FocusNode();
+  final _passwordFocusNode = FocusNode();
   final _api = createDriverApi();
-  final _otpController = TextEditingController();
-  final _otpFocusNode = FocusNode();
-  String _code = '';
+
   bool _loading = false;
-  int _resendSeconds = 30;
-  Timer? _resendTimer;
+  bool _obscurePassword = true;
+  String? _setupMessage;
+  String? _emailError;
+  String? _passwordError;
 
-  void _showOtpKeyboard() {
-    _otpFocusNode.requestFocus();
-    SystemChannels.textInput.invokeMethod<void>('TextInput.show');
-  }
+  Future<void> _signInWithPassword() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final l10n = context.l10n;
 
-  void _updateCode(String value) {
-    final digitsOnly = value.replaceAll(RegExp(r'\D'), '');
-    final nextCode = digitsOnly.length > _codeLength
-        ? digitsOnly.substring(0, _codeLength)
-        : digitsOnly;
-    if (_otpController.text != nextCode) {
-      _otpController.value = TextEditingValue(
-        text: nextCode,
-        selection: TextSelection.collapsed(offset: nextCode.length),
-      );
-    }
-    if (_code != nextCode) {
-      setState(() => _code = nextCode);
-    }
-  }
-
-  void _startResendTimer() {
-    _resendTimer?.cancel();
-    setState(() => _resendSeconds = 30);
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_resendSeconds <= 1) {
-        timer.cancel();
-        setState(() => _resendSeconds = 0);
-        return;
-      }
-      setState(() => _resendSeconds -= 1);
+    setState(() {
+      _emailError = email.isEmpty ? l10n.enterEmail : null;
+      _passwordError = password.isEmpty ? l10n.enterPassword : null;
+      _setupMessage = null;
     });
-  }
-
-  void _resendCode() {
-    if (_resendSeconds > 0) return;
-    _otpController.clear();
-    setState(() => _code = '');
-    _startResendTimer();
-    DriverSnack.show(context, context.l10n.codeResent);
-  }
-
-  Future<void> _verify() async {
-    if (_code.length < _codeLength) {
-      DriverSnack.show(context, context.l10n.enterOtp);
-      return;
-    }
-
-    if (_code != _demoCode) {
-      DriverSnack.show(context, context.l10n.demoOtpHint);
-      return;
-    }
+    if (_emailError != null || _passwordError != null) return;
 
     setState(() => _loading = true);
     try {
-      final session = await _api.driverLogin(phone: widget.phone);
+      await DriverFirebaseAuth.instance.signIn(email, password);
+      final token = await DriverFirebaseAuth.instance.idToken();
+      if (token == null || !mounted) return;
+      final session = await _api.driverFirebaseLogin(idToken: token);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         driverRoute(builder: (_) => LoadingScreen(session: session)),
       );
-    } catch (error) {
+    } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      DriverSnack.show(
-        context,
-        error.toString().replaceFirst('Exception: ', ''),
-      );
-      setState(() => _loading = false);
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        try {
+          final hint = await _api.driverLoginHint(email: email);
+          if (!mounted) return;
+          if (!hint.requiresPassword) {
+            setState(() {
+              _setupMessage = l10n.setupInstructions;
+              _passwordError = null;
+            });
+            return;
+          }
+        } catch (_) {}
+      }
+      setState(() {
+        _passwordError = e.message ?? l10n.loginTitle;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _passwordError = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _sendSetupLink() async {
+    final email = _emailController.text.trim();
+    final l10n = context.l10n;
+    if (email.isEmpty) {
+      setState(() => _emailError = l10n.enterEmail);
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _emailError = null;
+    });
+    try {
+      final hint = await _api.driverLoginHint(email: email);
+      if (!mounted) return;
+      if (hint.requiresPassword) {
+        setState(() {
+          _setupMessage = l10n.loginSubtitlePassword;
+        });
+        return;
+      }
+      await DriverFirebaseAuth.instance.sendPasswordReset(email);
+      if (mounted) {
+        setState(() => _setupMessage = l10n.setupLinkSent);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted && (e.code == 'user-not-found' || e.code == 'invalid-email')) {
+        setState(() => _emailError = l10n.enterEmail);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _emailError = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+    final l10n = context.l10n;
+    if (email.isEmpty) {
+      setState(() => _emailError = l10n.enterEmail);
+      return;
+    }
+    try {
+      await DriverFirebaseAuth.instance.sendPasswordReset(email);
+      if (mounted) DriverSnack.show(context, l10n.resetEmailHint);
+    } catch (_) {
+      if (mounted) DriverSnack.show(context, l10n.resetEmailHint);
     }
   }
 
   @override
-  void initState() {
-    super.initState();
-    _startResendTimer();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _showOtpKeyboard();
-      }
-    });
-  }
-
-  @override
   void dispose() {
-    _otpController.dispose();
-    _otpFocusNode.dispose();
-    _resendTimer?.cancel();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
-  }
-
-  String _resendLabel(BuildContext context) {
-    final l10n = context.l10n;
-    if (_resendSeconds == 0) return l10n.resendCode;
-    final seconds = _resendSeconds.toString().padLeft(2, '0');
-    return l10n.resendIn(seconds);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return _AuthScaffold(
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 26, 24, 12),
-              child: Column(
-                children: [
-                  Text(
-                    l10n.verifyYourPhoneNumber,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: DriverColors.navyPanel,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    l10n.enterSixDigitCode,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFF66666B),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    height: 56,
-                    child: Stack(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: List.generate(
-                            _codeLength,
-                            (index) => _OtpBox(
-                              value: index < _code.length ? _code[index] : '',
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTap: _showOtpKeyboard,
-                            behavior: HitTestBehavior.translucent,
-                            child: Opacity(
-                              opacity: 0.02,
-                              child: TextField(
-                                controller: _otpController,
-                                focusNode: _otpFocusNode,
-                                autofocus: true,
-                                keyboardType: TextInputType.number,
-                                textInputAction: TextInputAction.done,
-                                autofillHints: const [AutofillHints.oneTimeCode],
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(_codeLength),
-                                ],
-                                onChanged: _updateCode,
-                                onSubmitted: (_) {
-                                  if (!_loading) _verify();
-                                },
-                                showCursor: false,
-                                style: const TextStyle(
-                                  color: Colors.transparent,
-                                  fontSize: 18,
-                                ),
-                                decoration: const InputDecoration(
-                                  counterText: '',
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  GestureDetector(
-                    onTap: _resendSeconds == 0 ? _resendCode : null,
-                    child: Text.rich(
-                      TextSpan(
-                        text: l10n.didntReceiveCode,
-                        style: const TextStyle(
-                          color: Color(0xFF66666B),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: _resendLabel(context),
-                            style: const TextStyle(
-                              color: DriverColors.orange,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final canPop = Navigator.of(context).canPop();
+              return SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: bottomInset + 24),
+                physics: const ClampingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    children: [
+                      _AuthHeader(
+                        canPop: canPop,
+                        onBack: canPop
+                            ? () => Navigator.of(context).maybePop()
+                            : null,
                       ),
-                    ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          TrddkBrandColors.cardMargin,
+                          28,
+                          TrddkBrandColors.cardMargin,
+                          24,
+                        ),
+                        child: _LoginForm(
+                            l10n: l10n,
+                            emailController: _emailController,
+                            passwordController: _passwordController,
+                            emailFocusNode: _emailFocusNode,
+                            passwordFocusNode: _passwordFocusNode,
+                            loading: _loading,
+                            obscurePassword: _obscurePassword,
+                            setupMessage: _setupMessage,
+                            emailError: _emailError,
+                            passwordError: _passwordError,
+                            onTogglePassword: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                            onEmailChanged: (_) => setState(() {
+                              _emailError = null;
+                              _setupMessage = null;
+                            }),
+                            onPasswordChanged: (_) => setState(() {
+                              _passwordError = null;
+                              _setupMessage = null;
+                            }),
+                            onForgotPassword: _loading ? null : _forgotPassword,
+                            onCreatePassword: _loading ? null : _sendSetupLink,
+                          onSignIn: _loading ? null : _signInWithPassword,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          l10n.needHelp,
+                          textAlign: TextAlign.center,
+                          style: TrddkTypography.text(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: TrddkBrandColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 30),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: DriverButton(
-                      label: _loading ? l10n.verifying : l10n.verify,
-                      onPressed: _loading ? null : _verify,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _AuthHeader extends StatelessWidget {
-  const _AuthHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final statusTop = MediaQuery.paddingOf(context).top;
-    return Container(
-      height: statusTop + 276,
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        color: DriverColors.navy,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.only(top: statusTop),
-        child: Center(
-          child: Image.asset(
-            DriverAssets.wordmark,
-            width: 190,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PhoneField extends StatelessWidget {
-  const _PhoneField({
-    required this.controller,
-    required this.focusNode,
-    required this.onTap,
-    required this.hintText,
+  const _AuthHeader({
+    required this.canPop,
+    this.onBack,
   });
 
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final VoidCallback onTap;
-  final String hintText;
+  final bool canPop;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+
     return Container(
-      height: 62,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.black, width: 2),
-        borderRadius: BorderRadius.circular(7),
+      height: top + TrddkBrandColors.headerHeight,
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: TrddkBrandColors.navy,
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(TrddkBrandColors.headerRadius),
+        ),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Row(
+      padding: EdgeInsets.fromLTRB(16, top + 8, 16, 20),
+      child: Column(
         children: [
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFDCE8F5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text(
-              '+966',
-              style: TextStyle(
-                color: DriverColors.navyPanel,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 34,
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            color: Colors.black,
-          ),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onTap: onTap,
-              autofocus: true,
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.done,
-              textDirection: TextDirection.ltr,
-              style: const TextStyle(color: Colors.black, fontSize: 18),
-              decoration: InputDecoration(
-                filled: false,
-                fillColor: Colors.transparent,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                hintText: hintText,
-                hintStyle: const TextStyle(
-                  color: Color(0xFFC3C3C3),
-                  fontSize: 17,
-                  fontWeight: FontWeight.w500,
-                ),
-                contentPadding: const EdgeInsets.only(top: 2),
-              ),
+          SizedBox(
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (canPop)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Material(
+                      color: const Color(0xFF1A2455),
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: onBack,
+                        child: const SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                const TrddkBrandLockup(height: 36),
+              ],
             ),
           ),
+          const Spacer(),
         ],
       ),
     );
   }
 }
 
-class _OtpBox extends StatelessWidget {
-  const _OtpBox({required this.value});
+class _LoginForm extends StatelessWidget {
+  const _LoginForm({
+    required this.l10n,
+    required this.emailController,
+    required this.passwordController,
+    required this.emailFocusNode,
+    required this.passwordFocusNode,
+    required this.loading,
+    required this.obscurePassword,
+    required this.setupMessage,
+    required this.emailError,
+    required this.passwordError,
+    required this.onTogglePassword,
+    required this.onEmailChanged,
+    required this.onPasswordChanged,
+    required this.onForgotPassword,
+    required this.onCreatePassword,
+    required this.onSignIn,
+  });
 
-  final String value;
+  final AppLocalizations l10n;
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
+  final FocusNode emailFocusNode;
+  final FocusNode passwordFocusNode;
+  final bool loading;
+  final bool obscurePassword;
+  final String? setupMessage;
+  final String? emailError;
+  final String? passwordError;
+  final VoidCallback onTogglePassword;
+  final ValueChanged<String> onEmailChanged;
+  final ValueChanged<String> onPasswordChanged;
+  final VoidCallback? onForgotPassword;
+  final VoidCallback? onCreatePassword;
+  final VoidCallback? onSignIn;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 56,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.black, width: 2),
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Text(
-        value,
-        style: const TextStyle(
-          color: Colors.black,
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+            Text(
+              l10n.loginTitle,
+              style: TrddkTypography.text(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: TrddkBrandColors.titleNavy,
+                height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.loginSubtitleCredentials,
+              style: TrddkTypography.text(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: TrddkBrandColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _AuthField(
+              label: l10n.emailLabel,
+              controller: emailController,
+              focusNode: emailFocusNode,
+              hintText: l10n.emailHint,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              textDirection: TextDirection.ltr,
+              prefixIcon: Icons.mail_outline_rounded,
+              errorText: emailError,
+              onChanged: onEmailChanged,
+              onSubmitted: (_) => passwordFocusNode.requestFocus(),
+            ),
+            const SizedBox(height: 16),
+            _AuthField(
+              label: l10n.passwordLabel,
+              controller: passwordController,
+              focusNode: passwordFocusNode,
+              hintText: l10n.passwordHint,
+              obscureText: obscurePassword,
+              textInputAction: TextInputAction.done,
+              prefixIcon: Icons.lock_outline_rounded,
+              suffixIcon: obscurePassword
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              onSuffixTap: onTogglePassword,
+              errorText: passwordError,
+              onChanged: onPasswordChanged,
+              onSubmitted: (_) {
+                if (onSignIn != null) onSignIn!();
+              },
+            ),
+            if (setupMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                setupMessage!,
+                style: TrddkTypography.text(
+                  fontSize: 13,
+                  color: TrddkBrandColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+            ],
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton(
+                onPressed: onForgotPassword,
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  l10n.forgotPassword,
+                  style: TrddkTypography.text(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: TrddkBrandColors.orange,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _PrimaryButton(
+              label: l10n.signIn,
+              loading: loading,
+              onPressed: onSignIn,
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              children: [
+                Text(
+                  l10n.noPasswordYet,
+                  style: TrddkTypography.text(
+                    fontSize: 14,
+                    color: TrddkBrandColors.textSecondary,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: onCreatePassword,
+                  child: Text(
+                    l10n.createPassword,
+                    style: TrddkTypography.text(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: TrddkBrandColors.orange,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+    );
+  }
+}
+
+class _AuthField extends StatefulWidget {
+  const _AuthField({
+    required this.label,
+    required this.controller,
+    required this.focusNode,
+    required this.hintText,
+    this.keyboardType,
+    this.textInputAction,
+    this.textDirection,
+    this.obscureText = false,
+    this.prefixIcon,
+    this.suffixIcon,
+    this.onSuffixTap,
+    this.errorText,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String hintText;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final TextDirection? textDirection;
+  final bool obscureText;
+  final IconData? prefixIcon;
+  final IconData? suffixIcon;
+  final VoidCallback? onSuffixTap;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  State<_AuthField> createState() => _AuthFieldState();
+}
+
+class _AuthFieldState extends State<_AuthField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final focused = widget.focusNode.hasFocus;
+    final borderColor = widget.errorText != null
+        ? TrddkBrandColors.error
+        : focused
+            ? TrddkBrandColors.orange
+            : TrddkBrandColors.border;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          widget.label,
+          style: TrddkTypography.text(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: TrddkBrandColors.titleNavy,
+          ),
         ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: TrddkBrandColors.fieldHeight,
+          child: TextField(
+            controller: widget.controller,
+            focusNode: widget.focusNode,
+            keyboardType: widget.keyboardType,
+            textInputAction: widget.textInputAction,
+            textDirection: widget.textDirection,
+            obscureText: widget.obscureText,
+            onChanged: widget.onChanged,
+            onSubmitted: widget.onSubmitted,
+            style: TrddkTypography.text(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: TrddkBrandColors.titleNavy,
+            ),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white,
+              hintText: widget.hintText,
+              hintStyle: TrddkTypography.text(
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+                color: const Color(0xFF9CA3AF),
+              ),
+              prefixIcon: widget.prefixIcon == null
+                  ? null
+                  : Icon(
+                      widget.prefixIcon,
+                      size: 20,
+                      color: focused
+                          ? TrddkBrandColors.orange
+                          : TrddkBrandColors.textSecondary,
+                    ),
+              suffixIcon: widget.suffixIcon == null
+                  ? null
+                  : IconButton(
+                      onPressed: widget.onSuffixTap,
+                      icon: Icon(
+                        widget.suffixIcon,
+                        size: 20,
+                        color: TrddkBrandColors.textSecondary,
+                      ),
+                    ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+              enabledBorder: OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(TrddkBrandColors.fieldRadius),
+                borderSide: BorderSide(color: borderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(TrddkBrandColors.fieldRadius),
+                borderSide: BorderSide(color: borderColor, width: 1.5),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(TrddkBrandColors.fieldRadius),
+                borderSide: const BorderSide(color: TrddkBrandColors.error),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(TrddkBrandColors.fieldRadius),
+                borderSide:
+                    const BorderSide(color: TrddkBrandColors.error, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+        if (widget.errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            widget.errorText!,
+            style: TrddkTypography.text(
+              fontSize: 13,
+              color: TrddkBrandColors.error,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PrimaryButton extends StatelessWidget {
+  const _PrimaryButton({
+    required this.label,
+    required this.loading,
+    this.onPressed,
+  });
+
+  final String label;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !loading;
+
+    return SizedBox(
+      height: TrddkBrandColors.buttonHeight,
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: enabled ? onPressed : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: TrddkBrandColors.orange,
+          disabledBackgroundColor:
+              TrddkBrandColors.orange.withValues(alpha: 0.45),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.85),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(TrddkBrandColors.fieldRadius),
+          ),
+        ),
+        child: loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: Colors.white,
+                ),
+              )
+            : Text(
+                label,
+                style: TrddkTypography.text(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
       ),
     );
   }

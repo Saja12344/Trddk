@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../screens/enter_phone_screen.dart';
+import '../screens/enter_email_screen.dart';
 import '../services/user_session.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/onboarding/onboarding_typography.dart';
@@ -40,10 +40,11 @@ class _SettingsPopupState extends State<SettingsPopup> {
   late AccountType _mode =
       UserSession.instance.accountType ?? AccountType.personal;
 
-  void _apply() {
-    UserSession.instance.setLanguage(_language);
-
+  Future<void> _apply() async {
     final navigator = Navigator.of(context);
+    await UserSession.instance.setLanguage(_language);
+    if (!mounted) return;
+
     final wasBusiness = UserSession.instance.isBusiness;
 
     if (_mode == AccountType.personal) {
@@ -64,7 +65,8 @@ class _SettingsPopupState extends State<SettingsPopup> {
       if (!navigator.mounted) return;
       navigator.push(
         MaterialPageRoute<void>(
-          builder: (_) => const EnterPhoneScreen(fromSettings: true),
+          builder: (_) =>
+              const EnterEmailScreen(accountType: AccountType.business),
         ),
       );
     });
@@ -162,8 +164,6 @@ class _SettingsPopupState extends State<SettingsPopup> {
                     selected: _language,
                     onChanged: (value) {
                       setState(() => _language = value);
-                      UserSession.instance.setLanguage(value);
-                      widget.onChanged();
                     },
                   ),
                 ),

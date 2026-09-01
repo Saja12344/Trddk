@@ -13,6 +13,7 @@ import '../services/driver_api.dart';
 import '../services/driver_prefs.dart';
 import '../services/session_store.dart';
 import '../ui/driver_design.dart';
+import '../ui/driver_map_config.dart';
 import '../ui/platform_ui.dart';
 import '../utils/arabic_display.dart';
 import '../widgets/driver_route_map.dart';
@@ -31,7 +32,6 @@ class _MapScreenState extends State<MapScreen>
   static const _startThresholdMeters = 1500.0;
   static const _enforceStartDistance = false;
 
-  final _api = createDriverApi();
   late final AnimationController _radarController;
   Timer? _gpsTimer;
   Timer? _distanceTimer;
@@ -49,6 +49,11 @@ class _MapScreenState extends State<MapScreen>
   Position? _driverPosition;
 
   DriverSession get _session => SessionStore.instance.session!;
+
+  TardadiApi get _api => createDriverApi(
+        organizationId: _session.driver.businessId,
+      );
+
   List<StopModel> get _orderedStops {
     final stops = [..._session.stops];
     stops.sort((a, b) => a.sequenceNo.compareTo(b.sequenceNo));
@@ -391,10 +396,6 @@ class _MapScreenState extends State<MapScreen>
 
   void _toggleBreak() {
     setState(() => _onBreak = !_onBreak);
-    DriverSnack.show(
-      context,
-      _onBreak ? context.l10n.breakStarted : context.l10n.tripResumed,
-    );
   }
 
   Future<void> _markArrived() async {
@@ -421,7 +422,6 @@ class _MapScreenState extends State<MapScreen>
       });
       await _refreshDistance();
       if (!mounted) return;
-      DriverSnack.show(context, context.l10n.returnRouteStarted);
       return;
     }
 
@@ -480,55 +480,43 @@ class _MapScreenState extends State<MapScreen>
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                48,
-                64,
-                48,
-                24 + MediaQuery.paddingOf(context).bottom,
+                20,
+                16,
+                20,
+                12 + MediaQuery.paddingOf(context).bottom,
               ),
               child: Column(
                 children: [
-                  SizedBox(
-                    width: 196,
-                    height: 196,
-                    child: AnimatedBuilder(
-                      animation: _radarController,
-                      builder: (context, _) {
-                        return CustomPaint(
-                          painter: _RadarPainter(
-                            rotation: _radarController.value * math.pi * 2,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 46),
-                  Text(
-                    l10n.distanceFromStart,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                  Expanded(
+                    flex: 5,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: DriverRouteMap(
+                        route: session.route,
+                        stops: _orderedStops,
+                        routeColor: _routeColor,
+                        targetStopIndex: 0,
+                        driverPosition: _driverGeoPoint,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Text(
-                    _formatDistance(context, _distanceKm),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 48,
-                      fontWeight: FontWeight.w900,
-                      height: 1,
+                  Expanded(
+                    flex: 4,
+                    child: _RouteStopsPreview(
+                      route: session.route,
+                      stops: _orderedStops,
                     ),
                   ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 14),
                   _StatusPill(canStart: _canStart),
-                  const Spacer(),
+                  const SizedBox(height: 14),
                   DriverButton(
                     label: l10n.start,
-                    onPressed: _startTrip,
+                    onPressed: _canStart ? _startTrip : null,
                     color: DriverColors.orange,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(
                     l10n.lastGps(
                       gps: _lastGps,
@@ -539,6 +527,8 @@ class _MapScreenState extends State<MapScreen>
                       vehicle: l10n.vehicleLabel(_selectedVehicle),
                     ),
                     textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.48),
                       fontSize: 11,
@@ -1066,5 +1056,112 @@ class _RadarPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RadarPainter oldDelegate) {
     return oldDelegate.rotation != rotation;
+  }
+}
+
+class _RouteStopsPreview extends StatelessWidget {
+  const _RouteStopsPreview({
+    required this.route,
+    required this.stops,
+  });
+
+  final RouteModel route;
+  final List<StopModel> stops;
+
+  String _label(BuildContext context, String en, String? ar) {
+    if (ar != null && ar.trim().isNotEmpty) {
+      return context.displayPlaceName(en, nameAr: ar);
+    }
+    return en;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final items = <({String title, String subtitle, Color color})>[];
+
+    final from = route.fromLocation;
+    if (from != null) {
+      items.add((
+        title: l10n.mapStart,
+        subtitle: _label(context, from.address, from.addressAr),
+        color: DriverMapConfig.startGreen,
+      ));
+    }
+
+    for (var i = 0; i < stops.length; i++) {
+      final stop = stops[i];
+      items.add((
+        title: '${l10n.mapStart == 'Start' ? 'Stop' : 'محطة'} ${i + 1}',
+        subtitle: _label(context, stop.name, stop.nameAr),
+        color: DriverColors.orange,
+      ));
+    }
+
+    final to = route.toLocation;
+    if (to != null) {
+      items.add((
+        title: l10n.mapEnd,
+        subtitle: _label(context, to.address, to.addressAr),
+        color: DriverMapConfig.endRed,
+      ));
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: DriverColors.navyPanel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                margin: const EdgeInsets.only(top: 5),
+                decoration: BoxDecoration(
+                  color: item.color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.subtitle,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }

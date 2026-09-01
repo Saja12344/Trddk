@@ -4,15 +4,17 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../models/models.dart';
+import 'passenger_auth_models.dart';
 
 class TardadiApi {
-  TardadiApi({AppConfig? config}) : _config = config ?? AppConfig.dev();
+  TardadiApi({AppConfig? config}) : _config = config ?? AppConfig.current();
 
   final AppConfig _config;
 
   Uri _uri(String path, [Map<String, String>? extraQuery]) {
+    final orgOverride = extraQuery?['organizationId'];
     final query = {
-      'organizationId': _config.organizationId,
+      if (orgOverride == null) 'organizationId': _config.organizationId,
       ...?extraQuery,
     };
     return Uri.parse('${_config.apiBaseUrl}$path')
@@ -27,14 +29,19 @@ class TardadiApi {
     required T Function(dynamic data) parser,
   }) async {
     final uri = _uri(path, query);
+    final headers = <String, String>{
+      if (method == 'POST') 'Content-Type': 'application/json',
+      if (_config.authToken != null && _config.authToken!.isNotEmpty)
+        'Authorization': 'Bearer ${_config.authToken}',
+    };
     final response = await switch (method) {
-      'GET' => http.get(uri),
+      'GET' => http.get(uri, headers: headers.isEmpty ? null : headers),
       'POST' => http.post(
           uri,
-          headers: {'Content-Type': 'application/json'},
+          headers: headers,
           body: body == null ? null : jsonEncode(body),
         ),
-      'DELETE' => http.delete(uri),
+      'DELETE' => http.delete(uri, headers: headers.isEmpty ? null : headers),
       _ => throw UnsupportedError('Unsupported method: $method'),
     };
 
@@ -92,18 +99,158 @@ class TardadiApi {
         'organizationId': _config.organizationId,
         'phone': phone,
       },
+      parser: _parseDriverSession,
+    );
+  }
+
+  Future<DriverSession> driverFirebaseLogin({
+    required String idToken,
+  }) {
+    return _request(
+      '/api/auth/firebase-app-session',
+      method: 'POST',
+      body: {
+        'idToken': idToken,
+        'app': 'driver',
+      },
+      parser: _parseDriverSession,
+    );
+  }
+
+  Future<({bool requiresPassword})> driverLoginHint({
+    required String email,
+  }) {
+    return _request(
+      '/api/auth/app-login-hint',
+      method: 'POST',
+      body: {
+        'email': email,
+        'app': 'driver',
+      },
       parser: (data) {
         final map = data as Map<String, dynamic>;
-        return DriverSession(
-          driver: DriverModel.fromJson(map['driver'] as Map<String, dynamic>),
-          bus: BusModel.fromJson(map['bus'] as Map<String, dynamic>),
-          route: RouteModel.fromJson(map['route'] as Map<String, dynamic>),
-          stops: (map['stops'] as List)
-              .map((e) => StopModel.fromJson(e as Map<String, dynamic>))
-              .toList(),
-          tripId: map['tripId'] as String?,
-        );
+        return (requiresPassword: map['requiresPassword'] as bool? ?? false);
       },
+    );
+  }
+
+  Future<void> driverSendPasswordSetup({required String email}) {
+    return _request(
+      '/api/auth/app-send-password-setup',
+      method: 'POST',
+      body: {
+        'email': email,
+        'app': 'driver',
+      },
+      parser: (_) {},
+    );
+  }
+
+  Future<void> passengerFirebaseLogin({required String idToken}) {
+    return _request(
+      '/api/auth/firebase-app-session',
+      method: 'POST',
+      body: {
+        'idToken': idToken,
+        'app': 'passenger',
+      },
+      parser: (_) {},
+    );
+  }
+
+  Future<({bool requiresPassword})> passengerLoginHint({
+    required String email,
+  }) {
+    return _request(
+      '/api/auth/app-login-hint',
+      method: 'POST',
+      body: {
+        'email': email,
+        'app': 'passenger',
+      },
+      parser: (data) {
+        final map = data as Map<String, dynamic>;
+        return (requiresPassword: map['requiresPassword'] as bool? ?? false);
+      },
+    );
+  }
+
+  Future<void> passengerSendPasswordSetup({required String email}) {
+    return _request(
+      '/api/auth/app-send-password-setup',
+      method: 'POST',
+      body: {
+        'email': email,
+        'app': 'passenger',
+      },
+      parser: (_) {},
+    );
+  }
+
+  Future<void> passengerSendEmailOtp({required String email}) {
+    return _request(
+      '/api/auth/passenger-send-otp',
+      method: 'POST',
+      body: {'email': email},
+      parser: (_) {},
+    );
+  }
+
+  Future<void> passengerVerifyEmailOtp({
+    required String email,
+    required String code,
+    String purpose = 'personal',
+  }) {
+    return _request(
+      '/api/auth/passenger-verify-otp',
+      method: 'POST',
+      body: {'email': email, 'code': code, 'purpose': purpose},
+      parser: (_) {},
+    );
+  }
+
+  Future<PassengerOtpVerifyResult> passengerVerifyEmailOtpDetailed({
+    required String email,
+    required String code,
+    String purpose = 'personal',
+  }) {
+    return _request(
+      '/api/auth/passenger-verify-otp',
+      method: 'POST',
+      body: {'email': email, 'code': code, 'purpose': purpose},
+      parser: (data) => PassengerOtpVerifyResult.fromJson(
+        data as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  Future<PassengerBusinessSessionResult> passengerBusinessSession({
+    required String verificationToken,
+    required String businessId,
+  }) {
+    return _request(
+      '/api/auth/passenger-business-session',
+      method: 'POST',
+      body: {
+        'verificationToken': verificationToken,
+        'businessId': businessId,
+      },
+      parser: (data) => PassengerBusinessSessionResult.fromJson(
+        data as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  DriverSession _parseDriverSession(dynamic data) {
+    final map = data as Map<String, dynamic>;
+    return DriverSession(
+      driver: DriverModel.fromJson(map['driver'] as Map<String, dynamic>),
+      bus: BusModel.fromJson(map['bus'] as Map<String, dynamic>),
+      route: RouteModel.fromJson(map['route'] as Map<String, dynamic>),
+      stops: (map['stops'] as List)
+          .map((e) => StopModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      tripId: map['tripId'] as String?,
     );
   }
 
@@ -197,9 +344,15 @@ class TardadiApi {
     );
   }
 
-  Future<RouteLiveSnapshot> getRouteLive(String routeId) {
+  Future<RouteLiveSnapshot> getRouteLive(
+    String routeId, {
+    String? organizationId,
+  }) {
     return _request(
       '/api/routes/$routeId/live',
+      query: organizationId == null
+          ? null
+          : {'organizationId': organizationId},
       parser: (data) =>
           RouteLiveSnapshot.fromJson(data as Map<String, dynamic>),
     );

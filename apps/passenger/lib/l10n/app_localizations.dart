@@ -19,7 +19,7 @@ class AppLocalizations {
     return AppLocaleScope.of(context);
   }
 
-  String get appName => isArabic ? 'ترددي' : 'Tardadi';
+  String get appName => 'TRDDK';
 
   String get next => isArabic ? 'التالي' : 'Next';
   String get save => isArabic ? 'حفظ' : 'Save';
@@ -67,8 +67,8 @@ class AppLocalizations {
       isArabic ? 'متابعة' : 'Continue';
 
   String get locationPermissionTitle => isArabic
-      ? 'السماح لـ "ترددي" باستخدام\nموقعك؟'
-      : "Allow 'Tardadi' to use\nyour location?";
+      ? 'السماح لـ TRDDK باستخدام\nموقعك؟'
+      : "Allow TRDDK to use\nyour location?";
 
   String get locationPermissionBody => isArabic
       ? 'سيُستخدم موقعك لعرض الأماكن القريبة وتحديثات المرور وتحديد موقعك.'
@@ -99,8 +99,12 @@ class AppLocalizations {
       : 'For registered organizations and companies only';
 
   String get businessNote => isArabic
-      ? 'الوصول للأعمال متاح للمنظمات المسجلة فقط'
-      : 'Business access is available for registered organizations only';
+      ? 'الوصول للأعمال يتطلب إيميل الشركة المسجّل — لا يُستخدم رقم الجوال'
+      : 'Business access requires your registered company email — not a phone number';
+
+  String get personalNote => isArabic
+      ? 'الحساب الشخصي (عام) لا يحتاج تسجيل دخول — انتقل مباشرة للخطوط العامة'
+      : 'Personal (public) mode needs no login — go straight to public routes';
 
   String get verifyYourNumber =>
       isArabic ? 'تحقق من رقمك' : 'Verify Your Number';
@@ -121,6 +125,31 @@ class AppLocalizations {
       isArabic ? 'أدخل رقم جوالك' : 'Enter your phone number';
   String get invalidPhone =>
       isArabic ? 'أدخل رقم جوال صحيح' : 'Enter a valid phone number';
+
+  String get enterYourEmail =>
+      isArabic ? 'أدخل بريدك الإلكتروني' : 'Enter your email';
+
+  String get emailOtpSubtitle => isArabic
+      ? 'سنرسل رمز تحقق إلى بريدك'
+      : 'We will send a verification code to your email';
+
+  String get sendVerificationCode =>
+      isArabic ? 'إرسال رمز التحقق' : 'Send verification code';
+
+  String get emailHint =>
+      isArabic ? 'name@company.com' : 'name@company.com';
+
+  String get enterValidEmail => isArabic
+      ? 'أدخل بريداً إلكترونياً صحيحاً'
+      : 'Enter a valid email address';
+
+  String get verifyEmailTitle =>
+      isArabic ? 'تحقق من بريدك' : 'Verify your email';
+
+  String get verifyEmailSubtitle => isArabic
+      ? 'أدخل الرمز المكوّن من 6 أرقام المرسل إلى بريدك'
+      : 'Enter the 6-digit code sent to your email';
+
   String get contactSupport =>
       isArabic ? 'تحتاج مساعدة؟ تواصل مع الدعم' : 'Need help? Contact support';
 
@@ -133,7 +162,7 @@ class AppLocalizations {
   String get resendCode => isArabic ? 'إعادة إرسال الرمز' : 'Resend Code';
 
   String get stationSearchHint =>
-      isArabic ? 'اسم المحطة' : 'Station name';
+      isArabic ? 'رقم الباص' : 'Bus number';
 
   String get noRoutesFound =>
       isArabic ? 'لا توجد مسارات' : 'No routes found';

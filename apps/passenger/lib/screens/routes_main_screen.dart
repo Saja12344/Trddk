@@ -1,12 +1,13 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/route_list_item.dart';
 import '../services/passenger_api.dart';
 import '../services/user_session.dart';
+import '../ui/trddk_typography.dart';
+import '../widgets/onboarding/tardadi_logo.dart';
 import '../widgets/onboarding/onboarding_scale.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/route_card.dart';
@@ -123,7 +124,6 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
               children: [
                 _RoutesHeader(
                   scale: scale,
-                  title: l10n.appName,
                   onMenuTap: _openSettings,
                 ),
                 Padding(
@@ -192,7 +192,7 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
                                         SizedBox(height: scale.s(12)),
                                         Text(
                                           l10n.noRoutesFound,
-                                          style: GoogleFonts.ubuntu(
+                                          style: TrddkTypography.text(
                                             color: OnboardingTheme.muted,
                                             fontSize: scale.s(15),
                                             fontWeight: FontWeight.w500,
@@ -248,12 +248,10 @@ class _ErrorState extends StatelessWidget {
 class _RoutesHeader extends StatelessWidget {
   const _RoutesHeader({
     required this.scale,
-    required this.title,
     required this.onMenuTap,
   });
 
   final OnboardingScale scale;
-  final String title;
   final VoidCallback onMenuTap;
 
   @override
@@ -262,7 +260,7 @@ class _RoutesHeader extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
         scale.horizontalPadding,
         scale.s(8),
-        scale.s(8),
+        scale.horizontalPadding,
         0,
       ),
       child: SizedBox(
@@ -279,15 +277,7 @@ class _RoutesHeader extends StatelessWidget {
                 fit: BoxFit.contain,
               ),
             ),
-            Text(
-              title,
-              style: GoogleFonts.ubuntu(
-                color: OnboardingTheme.white,
-                fontSize: scale.s(28),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
-            ),
+            TrddkWordmark(height: scale.s(28)),
             Align(
               alignment: AlignmentDirectional.centerEnd,
               child: Material(
@@ -355,14 +345,14 @@ class _SearchBar extends StatelessWidget {
           ),
           child: TextField(
             controller: controller,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: OnboardingTheme.white,
               fontSize: scale.s(15),
               fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
               hintText: l10n.stationSearchHint,
-              hintStyle: GoogleFonts.ubuntu(
+              hintStyle: TrddkTypography.text(
                 color: OnboardingTheme.white.withValues(alpha: 0.52),
                 fontSize: scale.s(15),
                 fontWeight: FontWeight.w400,
@@ -425,7 +415,7 @@ class _SectionHeader extends StatelessWidget {
           SizedBox(width: scale.s(10)),
           Text(
             title,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: OnboardingTheme.white,
               fontSize: scale.s(22),
               fontWeight: FontWeight.w700,

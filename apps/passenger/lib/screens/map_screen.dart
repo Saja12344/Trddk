@@ -144,7 +144,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ترددي'),
+        title: const Text('TRDDK'),
         actions: [
           IconButton(
             tooltip: 'تحديث',

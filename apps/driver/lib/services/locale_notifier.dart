@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'driver_prefs.dart';
@@ -8,7 +9,7 @@ class LocaleNotifier extends ChangeNotifier {
 
   static final LocaleNotifier instance = LocaleNotifier._();
 
-  Locale _locale = const Locale('en');
+  Locale _locale = const Locale('ar');
 
   Locale get locale => _locale;
 
@@ -16,7 +17,12 @@ class LocaleNotifier extends ChangeNotifier {
 
   Future<void> loadSaved() async {
     final code = await DriverPrefs.instance.getLocaleCode();
-    _locale = Locale(code ?? 'en');
+    if (code != null) {
+      _locale = Locale(code);
+    } else {
+      final device = PlatformDispatcher.instance.locale.languageCode;
+      _locale = Locale(device.startsWith('ar') ? 'ar' : 'en');
+    }
     notifyListeners();
   }
 

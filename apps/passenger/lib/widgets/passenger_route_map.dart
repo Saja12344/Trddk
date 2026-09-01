@@ -5,6 +5,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:tardadi_core/tardadi_core.dart';
 
+import '../ui/passenger_map_config.dart';
+
 class PassengerRouteMap extends StatefulWidget {
   const PassengerRouteMap({
     super.key,
@@ -41,7 +43,7 @@ class _PassengerRouteMapState extends State<PassengerRouteMap> {
       _mapController.fitCamera(
         CameraFit.bounds(
           bounds: bounds,
-          padding: const EdgeInsets.all(48),
+          padding: const EdgeInsets.fromLTRB(48, 56, 48, 72),
         ),
       );
     });
@@ -83,6 +85,16 @@ class _PassengerRouteMapState extends State<PassengerRouteMap> {
 
   @override
   Widget build(BuildContext context) {
+    if (TrddkGoogleMapsConfig.isConfigured) {
+      return TrddkGoogleRouteMap(
+        route: widget.route,
+        stops: widget.stops,
+        buses: widget.buses,
+        routeColor: _routeColor(),
+        borderRadius: widget.borderRadius,
+      );
+    }
+
     final routePoints = resolveRoutePoints(widget.route, widget.stops);
     final initialCenter = routePoints.isNotEmpty
         ? routePoints.first
@@ -102,10 +114,9 @@ class _PassengerRouteMapState extends State<PassengerRouteMap> {
         ),
         children: [
           TileLayer(
-            urlTemplate:
-                'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-            subdomains: const ['a', 'b', 'c', 'd'],
-            userAgentPackageName: 'com.tardadi.tardadiPassenger',
+            urlTemplate: PassengerMapConfig.tilesUrl,
+            subdomains: PassengerMapConfig.tileSubdomains,
+            userAgentPackageName: PassengerMapConfig.userAgentPackageName,
           ),
           if (routePoints.length >= 2)
             PolylineLayer(

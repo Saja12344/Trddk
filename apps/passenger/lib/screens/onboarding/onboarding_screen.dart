@@ -8,6 +8,7 @@ import '../../widgets/onboarding/onboarding_primary_button.dart';
 import '../../widgets/onboarding/onboarding_scale.dart';
 import '../../widgets/onboarding/onboarding_theme.dart';
 import '../../widgets/onboarding/onboarding_typography.dart';
+import '../../widgets/onboarding/tardadi_logo.dart';
 import '../../widgets/onboarding/previews/home_screen_preview.dart';
 import '../../widgets/onboarding/previews/tracking_screen_preview.dart';
 
@@ -90,10 +91,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Column(
             children: [
                   SizedBox(height: scale.s(16)),
-                  _OnboardingHeader(
-                    scale: scale,
-                    tagline: l10n.onboardingTagline,
-                  ),
+                  _OnboardingHeader(scale: scale),
                   SizedBox(height: scale.s(20)),
                   Expanded(
                     child: Column(
@@ -164,36 +162,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _OnboardingHeader extends StatelessWidget {
-  const _OnboardingHeader({
-    required this.scale,
-    required this.tagline,
-  });
+  const _OnboardingHeader({required this.scale});
 
   final OnboardingScale scale;
-  final String tagline;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Image.asset(
-          'assets/images/logo_full.png',
-          height: scale.s(44),
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
-        ),
-        SizedBox(height: scale.s(8)),
-        Text(
-          tagline,
-          textAlign: TextAlign.center,
-          style: OnboardingTypography.body(
-            fontSize: scale.onboardingTaglineSize,
-            fontWeight: FontWeight.w500,
-            color: OnboardingTheme.muted,
-            letterSpacing: 0.3,
-          ),
-        ),
-      ],
+    return Center(
+      child: TrddkWordmark(height: scale.s(32)),
     );
   }
 }

@@ -12,7 +12,7 @@ class DriverPrefs {
     _prefs ??= await SharedPreferences.getInstance();
   }
 
-  static const _localeKey = 'app_locale';
+  static const _localeKey = 'app_locale_v2';
 
   String _setupKey(String driverKey) => 'vehicle_setup_done_$driverKey';
   String _vehicleKey(String driverKey) => 'selected_vehicle_$driverKey';
