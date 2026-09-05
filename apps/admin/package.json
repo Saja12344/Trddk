@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "prebuild": "node scripts/validate-production.mjs",
+    "prebuild": "node validate-production.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"

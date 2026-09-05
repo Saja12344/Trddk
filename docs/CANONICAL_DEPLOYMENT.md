@@ -25,7 +25,7 @@ npx vercel --prod
 
 ## Pre-deploy guard
 
-`npm run build` in `apps/admin` runs `apps/admin/scripts/validate-production.mjs` first.
+`npm run build` in `apps/admin` runs `apps/admin/validate-production.mjs` first.
 
 ## Mobile apps
 
