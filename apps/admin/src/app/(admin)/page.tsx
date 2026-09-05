@@ -59,7 +59,7 @@ export default function HomePage() {
   return (
     <>
       <div className="page-header">
-        <h1>مرحباً {user?.name || "بك"} في ترددي</h1>
+        <h1>مرحباً {user?.name || "بك"} في TRDDK</h1>
         <p>
           {isSuperAdmin(user)
             ? "لوحة مدير النظام — إدارة كل الشركات"

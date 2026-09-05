@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ترددي — لوحة الإدارة",
+  title: "TRDDK — لوحة الإدارة",
   description: "إدارة الخطوط والباصات والسائقين",
   manifest: "/manifest.json",
   icons: {

@@ -4,15 +4,22 @@ import dynamic from "next/dynamic";
 import type { LatLngExpression } from "leaflet";
 import type { LocationPlace } from "@tardadi/shared";
 import type { MapMarker } from "@/lib/mapUtils";
+import GoogleMapsShell from "@/components/maps/GoogleMapsShell";
+import { isGoogleMapsEnabled } from "@/lib/googleMapsConfig";
 import type { PickMode } from "./RouteMapEditorInner";
 
-const RouteMapEditorInner = dynamic(() => import("./RouteMapEditorInner"), {
+const loading = (
+  <div className="route-map-editor route-map-loading">جاري تحميل الخريطة...</div>
+);
+
+const LeafletRouteMapEditor = dynamic(() => import("./RouteMapEditorInner"), {
   ssr: false,
-  loading: () => (
-    <div className="route-map-editor route-map-loading">
-      جاري تحميل الخريطة...
-    </div>
-  ),
+  loading: () => loading,
+});
+
+const GoogleRouteMapEditor = dynamic(() => import("./RouteMapEditorGoogle"), {
+  ssr: false,
+  loading: () => loading,
 });
 
 type RouteMapEditorProps = {
@@ -26,7 +33,15 @@ type RouteMapEditorProps = {
 };
 
 export default function RouteMapEditor(props: RouteMapEditorProps) {
-  return <RouteMapEditorInner {...props} />;
+  if (!isGoogleMapsEnabled()) {
+    return <LeafletRouteMapEditor {...props} />;
+  }
+
+  return (
+    <GoogleMapsShell fallback={<LeafletRouteMapEditor {...props} />}>
+      <GoogleRouteMapEditor {...props} />
+    </GoogleMapsShell>
+  );
 }
 
 export type { PickMode };

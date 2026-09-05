@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "./AuthProvider";
 import BusinessSwitcher from "./BusinessSwitcher";
 import { isSuperAdmin } from "@/lib/auth.constants";
+import TrddkWordmark from "./TrddkWordmark";
 
 type NavIcon =
   | "home"
   | "businesses"
+  | "beneficiaries"
   | "routes"
   | "buses"
   | "drivers"
@@ -21,6 +23,12 @@ const allNavItems = [
     label: "الشركات",
     icon: "businesses" as const,
     superOnly: true,
+  },
+  {
+    href: "/beneficiaries",
+    label: "المستفيدين",
+    icon: "beneficiaries" as const,
+    superOnly: false,
   },
   { href: "/routes", label: "الخطوط", icon: "routes" as const, superOnly: false },
   { href: "/buses", label: "الباصات", icon: "buses" as const, superOnly: false },
@@ -62,6 +70,17 @@ function NavIconGlyph({ icon }: { icon: NavIcon }) {
         <path d="M6 21V7l6-4 6 4v14" />
         <path d="M10 11h4" />
         <path d="M10 15h4" />
+      </svg>
+    );
+  }
+
+  if (icon === "beneficiaries") {
+    return (
+      <svg {...common}>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     );
   }
@@ -123,11 +142,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     <div className="admin-layout">
       <aside className="sidebar">
         <div className="brand">
-          <img
-            className="brand-logo"
-            src="/icons/tardadi-wordmark.png"
-            alt="شعار ترددي"
-          />
+          <TrddkWordmark className="sidebar-wordmark" />
           <div className="brand-copy">
             <small>لوحة الإدارة</small>
             {!loading && user && (

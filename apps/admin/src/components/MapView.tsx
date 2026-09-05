@@ -3,14 +3,23 @@
 import dynamic from "next/dynamic";
 import type { LatLngExpression } from "leaflet";
 import type { MapMarker } from "@/lib/mapUtils";
+import GoogleMapsShell from "@/components/maps/GoogleMapsShell";
+import { isGoogleMapsEnabled } from "@/lib/googleMapsConfig";
 
-const MapViewInner = dynamic(() => import("./MapViewInner"), {
+const loading = (
+  <div className="map-loading" style={{ height: 360 }}>
+    جاري تحميل الخريطة...
+  </div>
+);
+
+const LeafletMapView = dynamic(() => import("./MapViewInner"), {
   ssr: false,
-  loading: () => (
-    <div className="map-loading" style={{ height: 360 }}>
-      جاري تحميل الخريطة...
-    </div>
-  ),
+  loading: () => loading,
+});
+
+const GoogleMapView = dynamic(() => import("./MapViewGoogle"), {
+  ssr: false,
+  loading: () => loading,
 });
 
 type MapViewProps = {
@@ -21,5 +30,13 @@ type MapViewProps = {
 };
 
 export default function MapView(props: MapViewProps) {
-  return <MapViewInner {...props} />;
+  if (!isGoogleMapsEnabled()) {
+    return <LeafletMapView {...props} />;
+  }
+
+  return (
+    <GoogleMapsShell fallback={<LeafletMapView {...props} />}>
+      <GoogleMapView {...props} />
+    </GoogleMapsShell>
+  );
 }
