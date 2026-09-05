@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
+import { Map, useMap } from "@vis.gl/react-google-maps";
 import type { LocationPlace } from "@tardadi/shared";
 import GoogleMapsShell from "@/components/maps/GoogleMapsShell";
+import TrddkGoogleMarker from "@/components/maps/TrddkGoogleMarker";
 import type { MapLatLng } from "@/components/maps/googleMapUtils";
 import { toMapLatLng } from "@/components/maps/googleMapUtils";
-import { getGoogleMapsClientConfig } from "@/lib/googleMapsConfig";
 import { GOOGLE_MAP_BASE_PROPS } from "@/lib/googleMapDefaults";
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/mapUtils";
 
@@ -42,7 +42,6 @@ function LocationPickerGoogleMap({
   onPick,
   onDrag,
 }: LocationPickerGoogleMapProps) {
-  const { mapId } = getGoogleMapsClientConfig();
   const center = value
     ? { lat: value.latitude, lng: value.longitude }
     : toMapLatLng(DEFAULT_MAP_CENTER);
@@ -50,7 +49,6 @@ function LocationPickerGoogleMap({
   return (
     <Map
       {...GOOGLE_MAP_BASE_PROPS}
-      mapId={mapId}
       className="google-map-canvas"
       style={{ height: 220, width: "100%", borderRadius: 12 }}
       defaultCenter={center}
@@ -64,21 +62,16 @@ function LocationPickerGoogleMap({
       {value && (
         <>
           <GoogleMapFlyTo position={center} zoom={14} />
-          <AdvancedMarker
+          <TrddkGoogleMarker
             position={center}
             draggable
-            onDragEnd={(event) => {
-              const lat = event.latLng?.lat();
-              const lng = event.latLng?.lng();
-              if (lat == null || lng == null) return;
-              onDrag(lat, lng);
-            }}
+            onDragEnd={(pos) => onDrag(pos.lat, pos.lng)}
           >
             <span
               className="location-pin"
               style={{ ["--pin-color" as string]: pinColor }}
             />
-          </AdvancedMarker>
+          </TrddkGoogleMarker>
         </>
       )}
     </Map>

@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { AdvancedMarker, Map, Polyline } from "@vis.gl/react-google-maps";
+import { Map, Polyline } from "@vis.gl/react-google-maps";
 import type { LatLngExpression } from "leaflet";
 import type { LocationPlace } from "@tardadi/shared";
 import GoogleMapFitBounds from "@/components/maps/GoogleMapFitBounds";
+import TrddkGoogleMarker from "@/components/maps/TrddkGoogleMarker";
 import { toMapLatLng, toMapLatLngList } from "@/components/maps/googleMapUtils";
-import { getGoogleMapsClientConfig } from "@/lib/googleMapsConfig";
 import { GOOGLE_MAP_BASE_PROPS } from "@/lib/googleMapDefaults";
 import { ROUTE_LINE } from "@/lib/mapConfig";
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, type MapMarker } from "@/lib/mapUtils";
@@ -31,7 +31,6 @@ function RouteMapEditorGoogleMap({
   onMapPick,
   onMarkerDrag,
 }: RouteMapEditorGoogleProps) {
-  const { mapId } = getGoogleMapsClientConfig();
   const fitPoints = useMemo(() => {
     const pts = [
       ...(fromLocation
@@ -60,7 +59,6 @@ function RouteMapEditorGoogleMap({
 
       <Map
         {...GOOGLE_MAP_BASE_PROPS}
-        mapId={mapId}
         className="route-map-canvas google-map-canvas"
         defaultCenter={toMapLatLng(DEFAULT_MAP_CENTER)}
         defaultZoom={DEFAULT_MAP_ZOOM}
@@ -83,51 +81,41 @@ function RouteMapEditorGoogleMap({
         )}
 
         {fromLocation && (
-          <AdvancedMarker
+          <TrddkGoogleMarker
             position={{
               lat: fromLocation.latitude,
               lng: fromLocation.longitude,
             }}
             draggable
             title={`من: ${fromLocation.address}`}
-            onDragEnd={(event) => {
-              const lat = event.latLng?.lat();
-              const lng = event.latLng?.lng();
-              if (lat == null || lng == null) return;
-              onMarkerDrag("from", lat, lng);
-            }}
+            onDragEnd={(pos) => onMarkerDrag("from", pos.lat, pos.lng)}
           >
             <span className="endpoint-pin endpoint-pin-from" />
-          </AdvancedMarker>
+          </TrddkGoogleMarker>
         )}
 
         {toLocation && (
-          <AdvancedMarker
+          <TrddkGoogleMarker
             position={{
               lat: toLocation.latitude,
               lng: toLocation.longitude,
             }}
             draggable
             title={`إلى: ${toLocation.address}`}
-            onDragEnd={(event) => {
-              const lat = event.latLng?.lat();
-              const lng = event.latLng?.lng();
-              if (lat == null || lng == null) return;
-              onMarkerDrag("to", lat, lng);
-            }}
+            onDragEnd={(pos) => onMarkerDrag("to", pos.lat, pos.lng)}
           >
             <span className="endpoint-pin endpoint-pin-to" />
-          </AdvancedMarker>
+          </TrddkGoogleMarker>
         )}
 
         {extraMarkers.map((marker) => (
-          <AdvancedMarker
+          <TrddkGoogleMarker
             key={marker.id}
             position={toMapLatLng(marker.position)}
             title={marker.label}
           >
             <span className="stop-pin" />
-          </AdvancedMarker>
+          </TrddkGoogleMarker>
         ))}
       </Map>
     </div>

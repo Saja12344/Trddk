@@ -56,6 +56,11 @@ requireMatch(
   /isGoogleMapsEnabled/,
   "RouteMapEditor must support approved Google dark map path"
 );
+requireMatch(
+  "src/lib/googleMapDefaults.ts",
+  /TRDDK_DARK_MAP_STYLE|#12144A/,
+  "Google map defaults must include approved TRDDK dark styling"
+);
 
 if (failures.length > 0) {
   console.error("Admin production validation failed:\n");

@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { AdvancedMarker, Map, Polyline } from "@vis.gl/react-google-maps";
+import { Map, Polyline } from "@vis.gl/react-google-maps";
 import type { LatLngExpression } from "leaflet";
 import GoogleMapFitBounds from "@/components/maps/GoogleMapFitBounds";
+import TrddkGoogleMarker from "@/components/maps/TrddkGoogleMarker";
 import { toMapLatLng, toMapLatLngList } from "@/components/maps/googleMapUtils";
-import { getGoogleMapsClientConfig } from "@/lib/googleMapsConfig";
 import { GOOGLE_MAP_BASE_PROPS } from "@/lib/googleMapDefaults";
 import { ROUTE_LINE } from "@/lib/mapConfig";
 import {
@@ -27,7 +27,6 @@ function MapViewGoogleMap({
   className = "",
   height = 360,
 }: MapViewGoogleProps) {
-  const { mapId } = getGoogleMapsClientConfig();
   const points = useMemo(() => markers.map((marker) => toMapLatLng(marker.position)), [markers]);
   const pointsKey = useMemo(
     () => points.map((p) => `${p.lat},${p.lng}`).join("|"),
@@ -47,7 +46,6 @@ function MapViewGoogleMap({
     >
       <Map
         {...GOOGLE_MAP_BASE_PROPS}
-        mapId={mapId}
         className="google-map-canvas"
         style={{ height: "100%", width: "100%", borderRadius: 12 }}
         defaultCenter={toMapLatLng(DEFAULT_MAP_CENTER)}
@@ -65,7 +63,7 @@ function MapViewGoogleMap({
         )}
 
         {markers.map((marker) => (
-          <AdvancedMarker
+          <TrddkGoogleMarker
             key={marker.id}
             position={toMapLatLng(marker.position)}
             title={marker.label}
@@ -82,7 +80,7 @@ function MapViewGoogleMap({
               }
               aria-hidden="true"
             />
-          </AdvancedMarker>
+          </TrddkGoogleMarker>
         ))}
       </Map>
     </div>
