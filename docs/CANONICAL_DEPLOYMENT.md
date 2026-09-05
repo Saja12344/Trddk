@@ -27,6 +27,12 @@ npx vercel --prod
 
 `npm run build` in `apps/admin` runs `apps/admin/validate-production.mjs` first.
 
+## Vercel upload exclusions
+
+Root `.vercelignore` must use `/firebase` (repo root only). A bare `firebase`
+pattern also excludes `apps/admin/src/lib/firebase/` and breaks email login builds.
+PNG exclusions must allow `apps/admin/public/**` so TRDDK icons deploy.
+
 ## Mobile apps
 
 - Passenger: `apps/passenger/`
