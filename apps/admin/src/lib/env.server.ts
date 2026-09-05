@@ -14,6 +14,7 @@ export const ADMIN_PROXY_ALLOWLIST = [
   "drivers",
   "trips",
   "businesses",
+  "users",
   "health",
 ] as const;
 

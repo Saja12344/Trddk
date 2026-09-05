@@ -182,4 +182,148 @@ router.post("/driver-login", async (req, res) => {
   }
 });
 
+router.post("/passenger-send-otp", async (req, res) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email?.trim()) {
+      fail(res, "Enter a valid email address.");
+      return;
+    }
+    const { sendPassengerEmailOtp } = await import("../services/passengerOtp");
+    const result = await sendPassengerEmailOtp(email);
+    ok(res, { sent: true, throttled: result.throttled });
+  } catch (error) {
+    fail(res, (error as Error).message, 400);
+  }
+});
+
+router.post("/passenger-verify-otp", async (req, res) => {
+  try {
+    const { email, code, purpose } = req.body as {
+      email?: string;
+      code?: string;
+      purpose?: string;
+    };
+    if (!email?.trim() || !code?.trim()) {
+      fail(res, "Enter the 6-digit code.");
+      return;
+    }
+    const { verifyPassengerEmailOtp } = await import("../services/passengerOtp");
+    const result = await verifyPassengerEmailOtp(email, code, {
+      requireBusinessMembership: purpose === "business",
+    });
+    ok(res, result);
+  } catch (error) {
+    fail(res, (error as Error).message, 401);
+  }
+});
+
+router.post("/app-login-hint", async (req, res) => {
+  try {
+    const { email, app } = req.body as {
+      email?: string;
+      app?: "driver" | "passenger" | "admin";
+    };
+    if (!email?.trim() || !app) {
+      fail(res, "Invalid request.");
+      return;
+    }
+    const { resolveAppLoginHint } = await import("../services/users");
+    const result = await resolveAppLoginHint(email, app);
+    ok(res, result);
+  } catch (error) {
+    fail(res, (error as Error).message, 401);
+  }
+});
+
+router.post("/passenger-business-session", async (req, res) => {
+  try {
+    const { verificationToken, businessId } = req.body as {
+      verificationToken?: string;
+      businessId?: string;
+    };
+    if (!verificationToken || !businessId) {
+      fail(res, "Invalid request.");
+      return;
+    }
+    const {
+      parsePassengerVerificationToken,
+      assertPassengerBusinessAccess,
+      signPassengerSessionToken,
+    } = await import("../services/passengerSession");
+    const parsed = parsePassengerVerificationToken(verificationToken);
+    if (!parsed) {
+      fail(res, "Session expired. Sign in again.", 401);
+      return;
+    }
+    await assertPassengerBusinessAccess(parsed.uid, businessId);
+    const businessDoc = await db.collection(COLLECTIONS.businesses).doc(businessId).get();
+    if (!businessDoc.exists) {
+      fail(res, "Company not found.", 404);
+      return;
+    }
+    const sessionToken = signPassengerSessionToken(
+      parsed.uid,
+      parsed.email,
+      businessId
+    );
+    ok(res, {
+      sessionToken,
+      businessId,
+      businessName: (businessDoc.data()?.name as string) ?? businessId,
+      email: parsed.email,
+    });
+  } catch (error) {
+    fail(res, (error as Error).message, 401);
+  }
+});
+
+router.post("/admin-mfa-challenge", async (req, res) => {
+  try {
+    const { idToken } = req.body as { idToken?: string };
+    if (!idToken) {
+      fail(res, "Invalid credentials.");
+      return;
+    }
+    const { beginAdminMfaChallenge } = await import("../services/adminMfa");
+    const result = await beginAdminMfaChallenge(idToken);
+    ok(res, result);
+  } catch (error) {
+    fail(res, (error as Error).message, 401);
+  }
+});
+
+router.post("/admin-mfa-verify", async (req, res) => {
+  try {
+    const { challengeToken, code } = req.body as {
+      challengeToken?: string;
+      code?: string;
+    };
+    if (!challengeToken || !code?.trim()) {
+      fail(res, "Invalid request.");
+      return;
+    }
+    const { verifyAdminEmailOtp } = await import("../services/adminMfa");
+    const result = await verifyAdminEmailOtp(challengeToken, code);
+    ok(res, result);
+  } catch (error) {
+    fail(res, (error as Error).message, 401);
+  }
+});
+
+router.post("/admin-mfa-resend", async (req, res) => {
+  try {
+    const { challengeToken } = req.body as { challengeToken?: string };
+    if (!challengeToken) {
+      fail(res, "Invalid request.");
+      return;
+    }
+    const { resendAdminMfaOtp } = await import("../services/adminMfa");
+    await resendAdminMfaOtp(challengeToken);
+    ok(res, { sent: true });
+  } catch (error) {
+    fail(res, (error as Error).message, 400);
+  }
+});
+
 export default router;
