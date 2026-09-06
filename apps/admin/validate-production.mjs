@@ -58,8 +58,8 @@ requireMatch(
 );
 requireMatch(
   "src/lib/googleMapDefaults.ts",
-  /TRDDK_DARK_MAP_STYLE|#12144A/,
-  "Google map defaults must include approved TRDDK dark styling"
+  /getGoogleMapProps|#12144A|mapId/,
+  "Google map defaults must include approved TRDDK dark mapId styling"
 );
 
 if (failures.length > 0) {

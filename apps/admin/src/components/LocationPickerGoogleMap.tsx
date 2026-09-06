@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { Map, useMap } from "@vis.gl/react-google-maps";
+import { AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
 import type { LocationPlace } from "@tardadi/shared";
 import GoogleMapsShell from "@/components/maps/GoogleMapsShell";
-import TrddkGoogleMarker from "@/components/maps/TrddkGoogleMarker";
 import type { MapLatLng } from "@/components/maps/googleMapUtils";
 import { toMapLatLng } from "@/components/maps/googleMapUtils";
-import { GOOGLE_MAP_BASE_PROPS } from "@/lib/googleMapDefaults";
+import { getGoogleMapProps } from "@/lib/googleMapDefaults";
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/mapUtils";
 
 function GoogleMapFlyTo({
@@ -48,7 +47,7 @@ function LocationPickerGoogleMap({
 
   return (
     <Map
-      {...GOOGLE_MAP_BASE_PROPS}
+      {...getGoogleMapProps()}
       className="google-map-canvas"
       style={{ height: 220, width: "100%", borderRadius: 12 }}
       defaultCenter={center}
@@ -62,16 +61,21 @@ function LocationPickerGoogleMap({
       {value && (
         <>
           <GoogleMapFlyTo position={center} zoom={14} />
-          <TrddkGoogleMarker
+          <AdvancedMarker
             position={center}
             draggable
-            onDragEnd={(pos) => onDrag(pos.lat, pos.lng)}
+            onDragEnd={(event) => {
+              const lat = event.latLng?.lat();
+              const lng = event.latLng?.lng();
+              if (lat == null || lng == null) return;
+              onDrag(lat, lng);
+            }}
           >
             <span
               className="location-pin"
               style={{ ["--pin-color" as string]: pinColor }}
             />
-          </TrddkGoogleMarker>
+          </AdvancedMarker>
         </>
       )}
     </Map>

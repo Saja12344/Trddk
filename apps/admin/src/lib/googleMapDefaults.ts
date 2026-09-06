@@ -1,15 +1,19 @@
 import type { MapProps } from "@vis.gl/react-google-maps";
-import { TRDDK_DARK_MAP_STYLE } from "@/lib/trddkMapStyle";
+import { getGoogleMapsClientConfig } from "@/lib/googleMapsConfig";
 
 /**
  * Shared Google Map options for admin.
- * Uses approved client JSON styling (darkNavyJson) — do not pass mapId here;
- * cloud mapId and the styles prop are mutually exclusive in the Maps JS API.
+ * Uses cloud Map ID styling (TRDDK dark style on map ID 60c310628a438a911067393f).
+ * Do not set client JSON `styles` when mapId is present — they are mutually exclusive.
+ * Default vector rendering is required; RASTER ignores cloud styles.
  */
-export const GOOGLE_MAP_BASE_PROPS = {
-  gestureHandling: "greedy",
-  disableDefaultUI: true,
-  clickableIcons: false,
-  backgroundColor: "#12144A",
-  styles: TRDDK_DARK_MAP_STYLE,
-} satisfies Partial<MapProps>;
+export function getGoogleMapProps(): Partial<MapProps> {
+  const { mapId } = getGoogleMapsClientConfig();
+  return {
+    mapId,
+    gestureHandling: "greedy",
+    disableDefaultUI: true,
+    clickableIcons: false,
+    backgroundColor: "#12144A",
+  };
+}
