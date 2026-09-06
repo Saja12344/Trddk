@@ -27,7 +27,6 @@ export default function LocationSearchField({
 }: LocationSearchFieldProps) {
   const [query, setQuery] = useState(value?.address ?? "");
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [searchProvider, setSearchProvider] = useState<"google" | "osm">("osm");
   const [isOpen, setIsOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
@@ -55,9 +54,6 @@ export default function LocationSearchField({
         );
         const data = await response.json();
         setResults(Array.isArray(data.results) ? data.results : []);
-        if (data.provider === "google" || data.provider === "osm") {
-          setSearchProvider(data.provider);
-        }
         setIsOpen(true);
       } catch {
         setResults([]);
@@ -167,13 +163,6 @@ export default function LocationSearchField({
           </ul>
         )}
       </div>
-
-      {searchProvider === "osm" && (
-        <p className="search-provider-hint">
-          نتائج OpenStreetMap — لنتائج مثل Google Maps أضف{" "}
-          <code>GOOGLE_MAPS_API_KEY</code>
-        </p>
-      )}
     </div>
   );
 }

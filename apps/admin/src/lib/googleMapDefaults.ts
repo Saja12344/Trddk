@@ -1,18 +1,17 @@
 import type { MapProps } from "@vis.gl/react-google-maps";
-import { getGoogleMapsClientConfig } from "@/lib/googleMapsConfig";
+import { TRDDK_DARK_MAP_STYLE } from "@/lib/trddkMapStyle";
 
 /**
- * Admin Google Map — cloud mapId carries the approved TRDDK dark style
- * (6637bbb701c0f4712d80b34b on 60c310628a438a911067393f, project trddk-54c45).
- * Do not pass client JSON `styles` alongside mapId.
+ * Admin Google Map — same darkNavyJson as passenger app
+ * (packages/tardadi_core/lib/src/maps/trddk_map_style.dart).
+ * Do not pass mapId here; cloud mapId and client `styles` are mutually exclusive.
  */
 export function getGoogleMapProps(): Partial<MapProps> {
-  const { mapId } = getGoogleMapsClientConfig();
   return {
-    mapId,
     gestureHandling: "greedy",
     disableDefaultUI: true,
     clickableIcons: false,
     backgroundColor: "#12144A",
+    styles: TRDDK_DARK_MAP_STYLE,
   };
 }

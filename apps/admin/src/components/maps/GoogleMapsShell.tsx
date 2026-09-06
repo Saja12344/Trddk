@@ -89,7 +89,7 @@ export default function GoogleMapsShell({
   const { apiKey } = getGoogleMapsClientConfig();
 
   return (
-    <APIProvider apiKey={apiKey} libraries={["marker"]}>
+    <APIProvider apiKey={apiKey}>
       <GoogleMapsLoadGuard onFailure={() => setFailed(true)}>
         {children}
       </GoogleMapsLoadGuard>

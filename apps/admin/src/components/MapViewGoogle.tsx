@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { AdvancedMarker, Map, Polyline } from "@vis.gl/react-google-maps";
+import { Map, Polyline } from "@vis.gl/react-google-maps";
 import type { LatLngExpression } from "leaflet";
 import GoogleMapFitBounds from "@/components/maps/GoogleMapFitBounds";
+import TrddkGoogleMarker from "@/components/maps/TrddkGoogleMarker";
 import { toMapLatLng, toMapLatLngList } from "@/components/maps/googleMapUtils";
 import { getGoogleMapProps } from "@/lib/googleMapDefaults";
 import { ROUTE_LINE } from "@/lib/mapConfig";
@@ -62,7 +63,7 @@ function MapViewGoogleMap({
         )}
 
         {markers.map((marker) => (
-          <AdvancedMarker
+          <TrddkGoogleMarker
             key={marker.id}
             position={toMapLatLng(marker.position)}
             title={marker.label}
@@ -79,7 +80,7 @@ function MapViewGoogleMap({
               }
               aria-hidden="true"
             />
-          </AdvancedMarker>
+          </TrddkGoogleMarker>
         ))}
       </Map>
     </div>
