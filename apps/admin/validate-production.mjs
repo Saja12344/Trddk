@@ -59,7 +59,12 @@ requireMatch(
 requireMatch(
   "src/lib/googleMapDefaults.ts",
   /getGoogleMapProps|#12144A|mapId/,
-  "Google map defaults must include approved TRDDK dark mapId styling"
+  "Google map defaults must include approved TRDDK cloud map styling"
+);
+requireMatch(
+  "src/lib/trddkMapStyle.ts",
+  /#12144a/,
+  "Canonical TRDDK dark map JSON must remain in repo"
 );
 
 if (failures.length > 0) {

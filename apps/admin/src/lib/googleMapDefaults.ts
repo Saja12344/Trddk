@@ -2,10 +2,9 @@ import type { MapProps } from "@vis.gl/react-google-maps";
 import { getGoogleMapsClientConfig } from "@/lib/googleMapsConfig";
 
 /**
- * Shared Google Map options for admin.
- * Uses cloud Map ID styling (TRDDK dark style on map ID 60c310628a438a911067393f).
- * Do not set client JSON `styles` when mapId is present — they are mutually exclusive.
- * Default vector rendering is required; RASTER ignores cloud styles.
+ * Admin Google Map — cloud mapId carries the approved TRDDK dark style
+ * (6637bbb701c0f4712d80b34b on 60c310628a438a911067393f, project trddk-54c45).
+ * Do not pass client JSON `styles` alongside mapId.
  */
 export function getGoogleMapProps(): Partial<MapProps> {
   const { mapId } = getGoogleMapsClientConfig();
