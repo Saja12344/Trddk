@@ -104,6 +104,28 @@ export interface UpdateBusinessRequest {
   adminPassword?: string;
 }
 
+export type ManagerInvitationStatus =
+  | "invitation_pending"
+  | "email_verified"
+  | "active"
+  | "suspended"
+  | "incomplete"
+  | "invitation_failed";
+
+export interface CompanyManagerSummary {
+  uid: string | null;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: "business_admin";
+  accountStatus: string;
+  invitationStatus: ManagerInvitationStatus;
+  emailVerified: boolean;
+  mfaEnabled: boolean;
+  lastLoginAt: string | null;
+  incompleteReason?: string | null;
+}
+
 export interface Driver {
   driverId: string;
   businessId: string;
@@ -167,6 +189,11 @@ export interface Stop {
   updatedAt?: string;
 }
 
+export interface TripBreakLog {
+  startedAt: string;
+  endedAt: string;
+}
+
 export interface Trip {
   tripId: string;
   businessId: string;
@@ -178,6 +205,10 @@ export interface Trip {
   tripStatus: TripStatus;
   startedAt?: string | null;
   endedAt?: string | null;
+  onBreak?: boolean;
+  breakStartedAt?: string | null;
+  breakEndedAt?: string | null;
+  breakHistory?: TripBreakLog[];
   createdAt?: string;
   updatedAt?: string;
 }

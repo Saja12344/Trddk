@@ -1,0 +1,12 @@
+node_modules/
+.git/
+.firebase/
+apps/driver/
+apps/passenger/
+packages/tardadi_core/
+firebase/functions/
+**/.next/
+**/.dart_tool/
+**/ios/
+**/android/
+*.log

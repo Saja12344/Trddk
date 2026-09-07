@@ -69,7 +69,7 @@ class AppLocalizations {
       'tardadi': 'TRDDK',
       'loginTitle': 'Login',
       'loginSubtitleCredentials':
-          'Only numbers registered in the database can access',
+          'Sign in with the email registered for your driver account',
       'loginSubtitlePassword': 'Enter your password',
       'loginSubtitleSetup': 'Create your password from the email link',
       'emailLabel': 'Email',

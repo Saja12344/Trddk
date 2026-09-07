@@ -24,6 +24,7 @@ export interface JwtPayload {
   businessId: string | null;
   name: string;
   phone: string;
+  mfa?: string;
   iat: number;
   exp: number;
 }

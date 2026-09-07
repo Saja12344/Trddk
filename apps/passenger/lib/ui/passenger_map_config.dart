@@ -1,7 +1,7 @@
-/// Shared passenger map tiles — Carto dark without retina suffix (avoids API watermark).
+/// Passenger map tiles — OpenFreeMap (no API key watermark).
 abstract final class PassengerMapConfig {
   static const tilesUrl =
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
-  static const tileSubdomains = ['a', 'b', 'c', 'd'];
+      'https://tiles.openfreemap.org/osm/{z}/{x}/{y}.png';
+  static const tileSubdomains = <String>[];
   static const userAgentPackageName = 'com.tardadi.tardadiPassenger';
 }

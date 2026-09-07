@@ -48,6 +48,13 @@ export async function listBusinessEmployees(
     } as BusinessMembership;
 
     if (membership.status === "revoked") continue;
+    // Panel roles belong in company manager — not the beneficiaries employee list.
+    if (
+      membership.role === "business_admin" ||
+      membership.role === "business_viewer"
+    ) {
+      continue;
+    }
 
     const userDoc = await db.collection(COLLECTIONS.users).doc(uid).get();
     if (!userDoc.exists) continue;

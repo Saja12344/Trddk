@@ -3,6 +3,11 @@
     "rules": "firebase/firestore.rules",
     "indexes": "firebase/firestore.indexes.json"
   },
+  "apphosting": {
+    "backendId": "tardadi-admin",
+    "rootDir": "apphosting-staging",
+    "alwaysDeployFromSource": true
+  },
   "functions": [
     {
       "source": "firebase/functions",
@@ -12,9 +17,14 @@
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
-        "*.local"
+        "*.local",
+        "src",
+        "tsconfig.json",
+        "package-lock.json"
       ],
       "predeploy": [
+        "npm run build:shared",
+        "node scripts/prepare-functions-deploy.js",
         "npm --prefix \"$RESOURCE_DIR\" run build"
       ]
     }

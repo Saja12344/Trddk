@@ -162,7 +162,7 @@ export async function verifyPassengerEmailOtp(
     const memberships = await listPassengerMemberships(normalized);
     if (!user || memberships.length === 0) {
       throw new Error(
-        "هذا البريد غير مسجّل لدى شركتك. تأكد أنك اخترت «أعمال» وليس «شخصي»، أو تواصل مع الإدارة."
+        "This email is not registered with your company. Choose Business (not Personal), or contact your employer."
       );
     }
 

@@ -39,7 +39,8 @@ android {
             localProps.load(FileInputStream(localFile))
         }
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
-            localProps.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
+            localProps.getProperty("GOOGLE_MAPS_API_KEY")
+                ?: "AIzaSyA9F15H3pU03Jq7Fi5LbH-3xbNVRJX6aSA"
     }
 
     buildTypes {

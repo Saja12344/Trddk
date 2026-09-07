@@ -48,15 +48,19 @@ class _SettingsPopupState extends State<SettingsPopup> {
     final wasBusiness = UserSession.instance.isBusiness;
 
     if (_mode == AccountType.personal) {
-      UserSession.instance.setAccountType(AccountType.personal);
+      await UserSession.instance.setAccountType(AccountType.personal);
+      if (wasBusiness) {
+        await UserSession.instance.clearBusinessSession();
+      }
       widget.onChanged();
       navigator.pop();
       return;
     }
 
+    await UserSession.instance.setAccountType(AccountType.business);
     navigator.pop();
 
-    if (wasBusiness) {
+    if (wasBusiness && UserSession.instance.hasBusinessSession) {
       widget.onChanged();
       return;
     }
@@ -70,6 +74,19 @@ class _SettingsPopupState extends State<SettingsPopup> {
         ),
       );
     });
+  }
+
+  Future<void> _logout() async {
+    final navigator = Navigator.of(context);
+    await UserSession.instance.logoutBusiness();
+    if (!mounted) return;
+    navigator.pop();
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) => const EnterEmailScreen(accountType: AccountType.business),
+      ),
+      (_) => false,
+    );
   }
 
   @override
@@ -204,6 +221,28 @@ class _SettingsPopupState extends State<SettingsPopup> {
                   ),
                 ),
                 const SizedBox(height: 18),
+                if (UserSession.instance.hasBusinessSession) ...[
+                  SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: _logout,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: OnboardingTheme.white,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.18),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                      ),
+                      child: Text(
+                        l10n.logout,
+                        style: OnboardingTypography.label(fontSize: 15),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 SizedBox(
                   height: 48,
                   child: ElevatedButton(

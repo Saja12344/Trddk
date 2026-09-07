@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=trddk-dart-defines.sh
+source "$ROOT/scripts/trddk-dart-defines.sh"
 ANDROID_AVD="${ANDROID_AVD:-Tardadi_Passenger}"
 
 if [[ -z "${ANDROID_HOME:-}" ]]; then
@@ -40,4 +42,4 @@ fi
 echo "Running Driver app on $DEVICE_ID"
 bash "$ROOT/scripts/set-sim-location.sh"
 
-flutter run -d "$DEVICE_ID"
+flutter run -d "$DEVICE_ID" "${TRDDK_DART_DEFINES[@]}"

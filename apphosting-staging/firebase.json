@@ -1,0 +1,7 @@
+{
+  "apphosting": {
+    "backendId": "tardadi-admin",
+    "rootDir": ".",
+    "alwaysDeployFromSource": true
+  }
+}

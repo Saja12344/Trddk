@@ -13,7 +13,7 @@ final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await UserSession.instance.loadLocale();
+  await UserSession.instance.loadPersistedState();
   await LocalNotificationService.instance.initialize();
   BusArrivalNotificationService.instance
       .attachMessenger(rootScaffoldMessengerKey);

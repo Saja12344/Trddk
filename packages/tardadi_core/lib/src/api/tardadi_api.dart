@@ -12,9 +12,11 @@ class TardadiApi {
   final AppConfig _config;
 
   Uri _uri(String path, [Map<String, String>? extraQuery]) {
+    final publicScope = extraQuery?['scope'] == 'public';
     final orgOverride = extraQuery?['organizationId'];
     final query = {
-      if (orgOverride == null) 'organizationId': _config.organizationId,
+      if (!publicScope && orgOverride == null)
+        'organizationId': _config.organizationId,
       ...?extraQuery,
     };
     return Uri.parse('${_config.apiBaseUrl}$path')
@@ -43,9 +45,18 @@ class TardadiApi {
         ),
       'DELETE' => http.delete(uri, headers: headers.isEmpty ? null : headers),
       _ => throw UnsupportedError('Unsupported method: $method'),
-    };
+    }.timeout(const Duration(seconds: 15));
 
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    Map<String, dynamic> decoded;
+    try {
+      decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      throw Exception(
+        response.statusCode >= 400
+            ? 'Request failed (${response.statusCode})'
+            : 'Invalid server response',
+      );
+    }
     if (decoded['success'] != true) {
       throw Exception(decoded['error'] ?? 'Request failed');
     }
@@ -53,9 +64,10 @@ class TardadiApi {
     return parser(decoded['data']);
   }
 
-  Future<List<RouteModel>> getRoutes() {
+  Future<List<RouteModel>> getRoutes({bool publicScope = false}) {
     return _request(
       '/api/routes',
+      query: publicScope ? {'scope': 'public'} : null,
       parser: (data) => (data as List)
           .map((e) => RouteModel.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -316,6 +328,24 @@ class TardadiApi {
     );
   }
 
+  Future<void> setTripBreak({
+    required String tripId,
+    required String driverId,
+    required bool onBreak,
+  }) {
+    return _request(
+      '/api/trips/break',
+      method: 'POST',
+      body: {
+        'organizationId': _config.organizationId,
+        'tripId': tripId,
+        'driverId': driverId,
+        'onBreak': onBreak,
+      },
+      parser: (_) {},
+    );
+  }
+
   Future<void> sendGps({
     required String tripId,
     required String driverId,
@@ -325,6 +355,7 @@ class TardadiApi {
     double? speedKmh,
     double? heading,
     String? crowdLevel,
+    bool? onBreak,
   }) {
     return _request(
       '/api/gps',
@@ -339,6 +370,7 @@ class TardadiApi {
         if (speedKmh != null) 'speedKmh': speedKmh,
         if (heading != null) 'heading': heading,
         if (crowdLevel != null) 'crowdLevel': crowdLevel,
+        if (onBreak != null) 'onBreak': onBreak,
       },
       parser: (_) {},
     );

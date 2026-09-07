@@ -9,7 +9,7 @@ const router = Router();
 router.post("/", async (req, res) => {
   try {
     const orgId = getOrgId(req);
-    const { tripId, driverId, busId, latitude, longitude, speedKmh, heading, crowdLevel } =
+    const { tripId, driverId, busId, latitude, longitude, speedKmh, heading, crowdLevel, onBreak } =
       req.body;
 
     if (
@@ -71,6 +71,29 @@ router.post("/", async (req, res) => {
       capturedAt: now,
     });
 
+    const tripUpdate: Record<string, unknown> = {
+      updatedAt: now,
+      ...(crowdLevel ? { crowdLevel } : {}),
+    };
+
+    if (onBreak === true) {
+      tripUpdate.onBreak = true;
+      tripUpdate.breakStartedAt = now;
+    } else if (onBreak === false) {
+      const breakStartedAt = trip.breakStartedAt as string | undefined;
+      const breakHistory = [
+        ...((trip.breakHistory as Array<{ startedAt: string; endedAt: string }>) ??
+          []),
+      ];
+      if (breakStartedAt) {
+        breakHistory.push({ startedAt: breakStartedAt, endedAt: now });
+      }
+      tripUpdate.onBreak = false;
+      tripUpdate.breakStartedAt = null;
+      tripUpdate.breakEndedAt = now;
+      tripUpdate.breakHistory = breakHistory;
+    }
+
     await db
       .collection(COLLECTIONS.organizations)
       .doc(orgId)
@@ -83,10 +106,7 @@ router.post("/", async (req, res) => {
         ...(crowdLevel ? { crowdLevel } : {}),
       });
 
-    await tripRef.update({
-      updatedAt: now,
-      ...(crowdLevel ? { crowdLevel } : {}),
-    });
+    await tripRef.update(tripUpdate);
 
     ok(res, {
       gpsLogId: gpsRef.id,

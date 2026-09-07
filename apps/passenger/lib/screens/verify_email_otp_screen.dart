@@ -26,8 +26,15 @@ class _VerifyEmailOtpScreenState extends State<VerifyEmailOtpScreen> {
   final _otpControllers = List.generate(6, (_) => TextEditingController());
   final _focusNodes = List.generate(6, (_) => FocusNode());
   final _api = createPassengerApi();
-  var _secondsLeft = 60;
+  static const _otpTtlSeconds = 10 * 60;
+  static const _resendAfterSeconds = 60;
+
+  var _resendSecondsLeft = _otpTtlSeconds;
+
+  bool get _canResend =>
+      (_otpTtlSeconds - _resendSecondsLeft) >= _resendAfterSeconds;
   var _loading = false;
+  var _verifying = false;
   String? _error;
   Timer? _timer;
 
@@ -38,8 +45,8 @@ class _VerifyEmailOtpScreenState extends State<VerifyEmailOtpScreen> {
       node.canRequestFocus = false;
     }
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_secondsLeft == 0) return;
-      setState(() => _secondsLeft--);
+      if (_resendSecondsLeft == 0) return;
+      setState(() => _resendSecondsLeft--);
     });
   }
 
@@ -57,9 +64,9 @@ class _VerifyEmailOtpScreenState extends State<VerifyEmailOtpScreen> {
 
   String get _otp => _otpControllers.map((c) => c.text).join();
 
-  String get _timerLabel {
-    final minutes = (_secondsLeft ~/ 60).toString().padLeft(2, '0');
-    final seconds = (_secondsLeft % 60).toString().padLeft(2, '0');
+  String _formatCountdown(int totalSeconds) {
+    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }
 
@@ -76,36 +83,43 @@ class _VerifyEmailOtpScreenState extends State<VerifyEmailOtpScreen> {
     }
 
     for (var i = 0; i < 6; i++) {
-      if (_otpControllers[i].text.isEmpty) {
+        if (_otpControllers[i].text.isEmpty) {
         _otpControllers[i].text = value;
         setState(() {});
-        if (_otp.length == 6) _verify();
+        if (_otpCode.length == 6) {
+          Future.microtask(_verify);
+        }
         return;
       }
     }
   }
 
+  String get _otpCode =>
+      _otpControllers.map((c) => c.text).join().replaceAll(RegExp(r'\D'), '');
+
   Future<void> _verify() async {
-    if (_loading || _otp.length != 6) return;
+    if (_loading || _verifying) return;
+    final code = _otpCode;
+    if (code.length != 6) return;
     setState(() {
       _loading = true;
+      _verifying = true;
       _error = null;
     });
     try {
       final result = await _api.passengerVerifyEmailOtpDetailed(
-        email: widget.email,
-        code: _otp,
+        email: widget.email.trim(),
+        code: code,
         purpose: UserSession.instance.isBusiness ? 'business' : 'personal',
       );
       if (!mounted) return;
+      final l10n = context.l10n;
       if (UserSession.instance.isBusiness) {
         final token = result.verificationToken;
         final memberships = result.memberships;
         if (token == null || memberships.isEmpty) {
           setState(() {
-            _error = UserSession.instance.isArabic
-                ? 'تعذّر تسجيل الدخول. تحقق من بريدك أو تواصل مع جهة عملك.'
-                : 'Unable to sign in. Check your email or contact your employer.';
+            _error = l10n.chooseBusinessModeError;
           });
           return;
         }
@@ -145,28 +159,37 @@ class _VerifyEmailOtpScreenState extends State<VerifyEmailOtpScreen> {
       );
     } catch (e) {
       if (mounted) {
+        final l10n = context.l10n;
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
+          _error = _mapVerifyError(
+            e.toString().replaceFirst('Exception: ', ''),
+            l10n,
+          );
           for (final c in _otpControllers) {
             c.clear();
           }
         });
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _verifying = false;
+        });
+      }
     }
   }
 
   Future<void> _resend() async {
-    if (_secondsLeft > 0 || _loading) return;
+    if (!_canResend || _loading) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await _api.passengerSendEmailOtp(email: widget.email);
+      await _api.passengerSendEmailOtp(email: widget.email.trim());
       if (!mounted) return;
-      setState(() => _secondsLeft = 60);
+      setState(() => _resendSecondsLeft = _otpTtlSeconds);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -176,6 +199,23 @@ class _VerifyEmailOtpScreenState extends State<VerifyEmailOtpScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String _mapVerifyError(String message, AppLocalizations l10n) {
+    final lower = message.toLowerCase();
+    if (lower.contains('not registered') ||
+        lower.contains('غير مسج') ||
+        lower.contains('contact your employer') ||
+        lower.contains('تواصل مع الإدارة')) {
+      return l10n.emailNotRegisteredWithCompany;
+    }
+    if (lower.contains('invalid or expired')) {
+      return l10n.invalidOrExpiredOtp;
+    }
+    if (lower.contains('too many attempts')) {
+      return l10n.tooManyOtpAttempts;
+    }
+    return message;
   }
 
   @override
@@ -264,35 +304,39 @@ class _VerifyEmailOtpScreenState extends State<VerifyEmailOtpScreen> {
                         style: const TextStyle(color: Color(0xFFF87171)),
                       ),
                     ],
-                    const Spacer(),
-                    NumericKeypad(
-                      keyHeight: scale.s(48),
-                      keyFontSize: scale.s(22),
-                      onKeyTap: _onKeyTap,
-                    ),
                     SizedBox(height: scale.s(16)),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           l10n.didntReceiveCode,
-                          style: TextStyle(color: OnboardingTheme.muted),
+                          style: TextStyle(
+                            color: OnboardingTheme.muted,
+                            fontSize: scale.s(14),
+                          ),
                         ),
                         GestureDetector(
-                          onTap: _secondsLeft == 0 ? _resend : null,
+                          onTap: _canResend && !_loading ? _resend : null,
                           child: Text(
-                            _secondsLeft == 0
+                            _canResend
                                 ? l10n.resendCode
-                                : l10n.resendIn(_timerLabel),
+                                : l10n.resendIn(
+                                    _formatCountdown(_resendSecondsLeft),
+                                  ),
                             style: TextStyle(
-                              color: _secondsLeft == 0
-                                  ? OnboardingTheme.orange
-                                  : OnboardingTheme.muted,
+                              color: OnboardingTheme.orange,
                               fontWeight: FontWeight.w600,
+                              fontSize: scale.s(14),
                             ),
                           ),
                         ),
                       ],
+                    ),
+                    const Spacer(),
+                    NumericKeypad(
+                      keyHeight: scale.s(48),
+                      keyFontSize: scale.s(22),
+                      onKeyTap: _onKeyTap,
                     ),
                     SizedBox(height: scale.s(16)),
                     if (_loading)

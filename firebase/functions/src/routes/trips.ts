@@ -155,6 +155,77 @@ router.post("/arrived", async (req, res) => {
   }
 });
 
+router.post("/break", async (req, res) => {
+  try {
+    const businessId = getOrgId(req);
+    const { tripId, driverId, onBreak } = req.body;
+
+    if (!tripId || !driverId || onBreak === undefined) {
+      fail(res, "tripId, driverId, and onBreak are required");
+      return;
+    }
+
+    const tripRef = businessRef(db, businessId)
+      .collection(COLLECTIONS.trips)
+      .doc(tripId);
+
+    const tripDoc = await tripRef.get();
+    if (!tripDoc.exists) {
+      fail(res, "Trip not found", 404);
+      return;
+    }
+
+    const trip = tripDoc.data()!;
+    if (trip.tripStatus !== "active") {
+      fail(res, "Trip is not active", 400);
+      return;
+    }
+
+    if (trip.driverId !== driverId) {
+      fail(res, "Trip does not belong to this driver", 403);
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    if (onBreak) {
+      await tripRef.update({
+        onBreak: true,
+        breakStartedAt: now,
+        updatedAt: now,
+      });
+      ok(res, { tripId, onBreak: true, breakStartedAt: now });
+      return;
+    }
+
+    const breakStartedAt = trip.breakStartedAt as string | undefined;
+    const breakHistory = [
+      ...((trip.breakHistory as Array<{ startedAt: string; endedAt: string }>) ??
+        []),
+    ];
+    if (breakStartedAt) {
+      breakHistory.push({ startedAt: breakStartedAt, endedAt: now });
+    }
+
+    await tripRef.update({
+      onBreak: false,
+      breakStartedAt: null,
+      breakEndedAt: now,
+      breakHistory,
+      updatedAt: now,
+    });
+
+    ok(res, {
+      tripId,
+      onBreak: false,
+      breakEndedAt: now,
+      breakHistory,
+    });
+  } catch (error) {
+    fail(res, (error as Error).message, 500);
+  }
+});
+
 router.post("/end", async (req, res) => {
   try {
     const businessId = getOrgId(req);
@@ -185,6 +256,8 @@ router.post("/end", async (req, res) => {
     await tripRef.update({
       tripStatus: "ended",
       endedAt: now,
+      onBreak: false,
+      breakStartedAt: null,
       updatedAt: now,
     });
 

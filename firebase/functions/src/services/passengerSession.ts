@@ -185,7 +185,7 @@ export async function listPassengerMemberships(
     summaries.push({
       businessId: doc.id,
       businessName: (businessDoc.data()?.name as string) ?? doc.id,
-      passengerAccess: membership.passengerAccess !== false,
+      passengerAccess: resolvesPassengerAccess(membership),
       driverAccess: membership.driverAccess === true,
       status: membership.status,
     });

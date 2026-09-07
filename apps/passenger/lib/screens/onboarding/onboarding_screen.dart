@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/app_permissions.dart';
+import '../../services/user_session.dart';
 import '../account_type_screen.dart';
 import '../../widgets/onboarding/onboarding_feature_preview_card.dart';
 import '../../widgets/onboarding/onboarding_primary_button.dart';
@@ -35,6 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await AppPermissions.requestOnboardingPermissions(
       requestLocation: requestLocation,
     );
+    await UserSession.instance.markOnboardingCompleted();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(builder: (_) => const AccountTypeScreen()),

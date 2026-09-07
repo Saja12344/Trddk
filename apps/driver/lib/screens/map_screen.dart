@@ -35,6 +35,8 @@ class _MapScreenState extends State<MapScreen>
   late final AnimationController _radarController;
   Timer? _gpsTimer;
   Timer? _distanceTimer;
+  var _distanceRefreshInFlight = false;
+  LocationPermission? _locationPermission;
   bool _tripActive = false;
   bool _tripPanelOpen = false;
   bool _etaSheetExpanded = false;
@@ -157,15 +159,21 @@ class _MapScreenState extends State<MapScreen>
   }
 
   Future<void> _refreshDistance() async {
-    final session = SessionStore.instance.session;
-    if (session == null || session.stops.isEmpty) return;
-
+    if (_distanceRefreshInFlight) return;
+    _distanceRefreshInFlight = true;
     try {
-      final permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      final session = SessionStore.instance.session;
+      if (session == null) return;
+
+      _locationPermission ??= await Geolocator.checkPermission();
+      if (_locationPermission == LocationPermission.denied) {
+        _locationPermission = await Geolocator.requestPermission();
+      }
+      if (_locationPermission == LocationPermission.denied ||
+          _locationPermission == LocationPermission.deniedForever) {
         return;
       }
+
       final position = await _resolveDriverPosition();
       final target = _activeTarget;
       if (target == null) return;
@@ -184,6 +192,8 @@ class _MapScreenState extends State<MapScreen>
       }
     } catch (_) {
       // Keep the designed default distance when location is unavailable.
+    } finally {
+      _distanceRefreshInFlight = false;
     }
   }
 
@@ -199,7 +209,21 @@ class _MapScreenState extends State<MapScreen>
   static const _simulatorSnapThresholdMeters = 500.0;
 
   Future<Position> _resolveDriverPosition() async {
-    final gps = await Geolocator.getCurrentPosition();
+    final lastKnown = await Geolocator.getLastKnownPosition();
+    try {
+      final gps = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      return _maybeSnapToRoute(gps);
+    } catch (_) {
+      if (lastKnown != null) return _maybeSnapToRoute(lastKnown);
+      rethrow;
+    }
+  }
+
+  Position _maybeSnapToRoute(Position gps) {
     if (!kDebugMode) return gps;
 
     final routePoints = resolveRoutePoints(_session.route, _orderedStops);
@@ -291,15 +315,21 @@ class _MapScreenState extends State<MapScreen>
   }
 
   Future<void> _startGps(String tripId) async {
-    final permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    _locationPermission ??= await Geolocator.checkPermission();
+    if (_locationPermission == LocationPermission.denied) {
+      _locationPermission = await Geolocator.requestPermission();
+    }
+    if (_locationPermission == LocationPermission.denied ||
+        _locationPermission == LocationPermission.deniedForever) {
       _showError('يجب السماح بالموقع لإرسال موقع الباص');
       return;
     }
 
     _gpsTimer?.cancel();
+    var gpsInFlight = false;
     _gpsTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (gpsInFlight || _onBreak) return;
+      gpsInFlight = true;
       try {
         final position = await _resolveDriverPosition();
         await _api.sendGps(
@@ -329,6 +359,9 @@ class _MapScreenState extends State<MapScreen>
           });
         }
       } catch (_) {}
+      finally {
+        gpsInFlight = false;
+      }
     });
   }
 
@@ -394,8 +427,38 @@ class _MapScreenState extends State<MapScreen>
     setState(() => _etaSheetExpanded = !_etaSheetExpanded);
   }
 
-  void _toggleBreak() {
-    setState(() => _onBreak = !_onBreak);
+  Future<void> _toggleBreak() async {
+    final tripId = _session.tripId;
+    if (tripId == null) return;
+
+    final next = !_onBreak;
+    setState(() => _onBreak = next);
+    try {
+      await _api.setTripBreak(
+        tripId: tripId,
+        driverId: _session.driver.driverId,
+        onBreak: next,
+      );
+    } catch (_) {
+      try {
+        final position = await _resolveDriverPosition();
+        await _api.sendGps(
+          tripId: tripId,
+          driverId: _session.driver.driverId,
+          busId: _session.bus.busId,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          speedKmh: position.speed * 3.6,
+          heading: position.heading,
+          crowdLevel: next ? 'on_break' : _crowdLevel.name,
+          onBreak: next,
+        );
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _onBreak = !next);
+        _showError(error.toString().replaceFirst('Exception: ', ''));
+      }
+    }
   }
 
   Future<void> _markArrived() async {
@@ -411,21 +474,15 @@ class _MapScreenState extends State<MapScreen>
       } catch (_) {}
     }
 
-    if (!_returnLeg) {
-      final reversedRoute = reverseRouteModel(_session.route);
-      final reversedStops = reverseStops(_orderedStops);
-      SessionStore.instance.updateRoute(reversedRoute, reversedStops);
-      setState(() {
-        _returnLeg = true;
-        _targetStopIndex = 0;
-        _etaSheetExpanded = false;
-      });
-      await _refreshDistance();
-      if (!mounted) return;
-      return;
-    }
-
-    await _confirmEndTrip();
+    final reversedRoute = reverseRouteModel(_session.route);
+    final reversedStops = reverseStops(_orderedStops);
+    SessionStore.instance.updateRoute(reversedRoute, reversedStops);
+    setState(() {
+      _returnLeg = !_returnLeg;
+      _targetStopIndex = 0;
+      _etaSheetExpanded = true;
+    });
+    await _refreshDistance();
   }
 
   Widget _buildIdleScaffold(DriverSession session) {
@@ -497,6 +554,8 @@ class _MapScreenState extends State<MapScreen>
                         routeColor: _routeColor,
                         targetStopIndex: 0,
                         driverPosition: _driverGeoPoint,
+                        driverHeading: _driverPosition?.heading,
+                        followDriver: false,
                       ),
                     ),
                   ),
@@ -594,19 +653,18 @@ class _MapScreenState extends State<MapScreen>
             child: Stack(
               children: [
                 if (!_tripPanelOpen)
-                  const Positioned.fill(
-                    child: ColoredBox(color: DriverColors.navyDeep),
-                  ),
-                if (!_tripPanelOpen)
                   Positioned.fill(
-                    child: DriverRouteMap(
-                      route: _session.route,
-                      stops: _orderedStops,
-                      routeColor: _routeColor,
-                      targetStopIndex: _targetStopIndex,
-                      driverPosition: _driverGeoPoint,
-                      driverHeading: _driverPosition?.heading,
-                      followDriver: _tripActive && !_onBreak,
+                    child: ColoredBox(
+                      color: DriverColors.navyDeep,
+                      child: DriverRouteMap(
+                        route: _session.route,
+                        stops: _orderedStops,
+                        routeColor: _routeColor,
+                        targetStopIndex: _targetStopIndex,
+                        driverPosition: _driverGeoPoint,
+                        driverHeading: _driverPosition?.heading,
+                        followDriver: _tripActive && !_onBreak,
+                      ),
                     ),
                   ),
                 if (_isOffRoute && !_tripPanelOpen)

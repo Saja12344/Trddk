@@ -300,8 +300,12 @@ export async function resolveAppLoginHint(
     throw new Error("لا يوجد حساب بهذا البريد.");
   }
 
-  if (app === "driver" && user.primaryRole !== "driver") {
-    throw new Error("هذا الحساب غير مخول لتطبيق السائق.");
+  if (app === "driver") {
+    const { userMayUseDriverApp } = await import("./firebaseAppSession");
+    const loaded = await loadAuthenticatedUser(user.uid);
+    if (!loaded || !userMayUseDriverApp(loaded)) {
+      throw new Error("This account is not authorized for the driver app.");
+    }
   }
 
   if (app === "passenger") {

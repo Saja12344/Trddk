@@ -12,6 +12,8 @@ class UserSession extends ChangeNotifier {
 
   static const _localeKey = 'passenger_locale_v1';
   static const _sessionKey = 'passenger_business_session_v1';
+  static const _onboardingKey = 'passenger_onboarding_completed_v1';
+  static const _accountTypeKey = 'passenger_account_type_v1';
 
   AccountType? accountType;
   AppLanguage language = AppLanguage.english;
@@ -20,8 +22,9 @@ class UserSession extends ChangeNotifier {
   String? businessId;
   String? businessName;
   String? sessionToken;
+  var hasCompletedOnboarding = false;
 
-  Future<void> loadLocale() async {
+  Future<void> loadPersistedState() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_localeKey);
     if (saved != null) {
@@ -29,28 +32,50 @@ class UserSession extends ChangeNotifier {
     } else {
       applyDeviceLocale();
     }
-    await loadBusinessSession();
-  }
 
-  Future<void> loadBusinessSession() async {
-    final prefs = await SharedPreferences.getInstance();
+    hasCompletedOnboarding = prefs.getBool(_onboardingKey) ?? false;
+
     sessionToken = prefs.getString('${_sessionKey}_token');
     businessId = prefs.getString('${_sessionKey}_businessId');
     businessName = prefs.getString('${_sessionKey}_businessName');
     email = prefs.getString('${_sessionKey}_email');
+
     if (sessionToken != null && businessId != null) {
       accountType = AccountType.business;
+    } else {
+      final savedType = prefs.getString(_accountTypeKey);
+      if (savedType == 'business') {
+        accountType = AccountType.business;
+      } else if (savedType == 'personal') {
+        accountType = AccountType.personal;
+      }
     }
+
     notifyListeners();
   }
+
+  @Deprecated('Use loadPersistedState')
+  Future<void> loadLocale() => loadPersistedState();
 
   void applyDeviceLocale() {
     final code = PlatformDispatcher.instance.locale.languageCode;
     language = code.startsWith('ar') ? AppLanguage.arabic : AppLanguage.english;
   }
 
-  void setAccountType(AccountType type) {
+  Future<void> markOnboardingCompleted() async {
+    hasCompletedOnboarding = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingKey, true);
+    notifyListeners();
+  }
+
+  Future<void> setAccountType(AccountType type) async {
     accountType = type;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _accountTypeKey,
+      type == AccountType.business ? 'business' : 'personal',
+    );
     notifyListeners();
   }
 
@@ -85,6 +110,7 @@ class UserSession extends ChangeNotifier {
     await prefs.setString('${_sessionKey}_businessId', businessId);
     await prefs.setString('${_sessionKey}_businessName', businessName);
     await prefs.setString('${_sessionKey}_email', email);
+    await prefs.setString(_accountTypeKey, 'business');
     notifyListeners();
   }
 
@@ -92,6 +118,7 @@ class UserSession extends ChangeNotifier {
     sessionToken = null;
     businessId = null;
     businessName = null;
+    email = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('${_sessionKey}_token');
     await prefs.remove('${_sessionKey}_businessId');
@@ -100,10 +127,20 @@ class UserSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Keeps onboarding + account type; clears business login only.
+  Future<void> logoutBusiness() async {
+    await clearBusinessSession();
+  }
+
   bool get isBusiness => accountType == AccountType.business;
 
   bool get isArabic => language == AppLanguage.arabic;
 
   bool get hasBusinessSession =>
       isBusiness && sessionToken != null && businessId != null;
+
+  bool get needsBusinessLogin =>
+      hasCompletedOnboarding &&
+      accountType == AccountType.business &&
+      !hasBusinessSession;
 }

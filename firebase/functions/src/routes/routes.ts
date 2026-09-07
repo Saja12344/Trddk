@@ -52,7 +52,9 @@ async function listRoutesForBusiness(businessId: string) {
       let liveBusCount = 0;
 
       for (const tripDoc of activeTrips) {
-        const busId = tripDoc.data().busId as string;
+        const trip = tripDoc.data();
+        if (trip.onBreak === true) continue;
+        const busId = trip.busId as string;
         const bus = busById.get(busId);
         if (bus && isRecentlyUpdated(bus.lastSeenAt as string | undefined)) {
           liveBusCount += 1;
@@ -79,6 +81,24 @@ async function listRoutesForBusiness(businessId: string) {
 
 router.get("/", optionalAdminWithPermission("routes:read"), async (req, res) => {
   try {
+    const scope = req.query.scope as string | undefined;
+
+    // Passenger personal mode — list every active public route across businesses.
+    if (!req.adminAuth && scope === "public") {
+      const snap = await db.collection(COLLECTIONS.businesses).get();
+      const businessIds = snap.docs.map((doc) => doc.id);
+      const routes = await mapAcrossBusinesses(db, businessIds, listRoutesForBusiness);
+      ok(
+        res,
+        routes.filter((route) => {
+          const r = route as { status?: string; accessMode?: string };
+          // Match admin UI: anything that is not explicitly private is public.
+          return r.status === "active" && r.accessMode !== "private";
+        })
+      );
+      return;
+    }
+
     const businessId = resolveBusinessId(req, req.adminAuth);
     const businessIds = await listAccessibleBusinessIds(
       db,
@@ -128,6 +148,8 @@ router.get("/:routeId/live", async (req, res) => {
 
     for (const tripDoc of tripsSnapshot.docs) {
       const trip = tripDoc.data();
+      if (trip.onBreak === true) continue;
+
       const busDoc = await businessRef(db, businessId)
         .collection(COLLECTIONS.buses)
         .doc(trip.busId as string)

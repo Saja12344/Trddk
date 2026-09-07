@@ -6,7 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../config/google_maps_config.dart';
 import '../models/models.dart';
 import '../utils/route_polyline.dart';
-import '../utils/heading_utils.dart';
+import '../maps/trddk_map_markers.dart';
 
 /// Google Maps route preview — cloud map ID for admin-matched dark styling.
 class TrddkGoogleRouteMap extends StatefulWidget {
@@ -47,6 +47,8 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
   Set<gmaps.Polyline> _polylines = {};
   Set<gmaps.Circle> _circles = {};
   var _followEnabled = true;
+  var _cameraBusy = false;
+  String? _lastCameraKey;
 
   @override
   void initState() {
@@ -61,7 +63,21 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
     if (widget.followDriver && !oldWidget.followDriver) {
       _followEnabled = true;
     }
-    _rebuildOverlays();
+
+    final dataChanged = oldWidget.route.routeId != widget.route.routeId ||
+        oldWidget.route.polyline != widget.route.polyline ||
+        oldWidget.stops.length != widget.stops.length ||
+        oldWidget.buses.length != widget.buses.length ||
+        oldWidget.driverPosition?.latitude != widget.driverPosition?.latitude ||
+        oldWidget.driverPosition?.longitude != widget.driverPosition?.longitude;
+
+    if (dataChanged) {
+      _rebuildOverlays();
+      setState(() {});
+    }
+
+    if (!dataChanged) return;
+
     if (widget.followDriver && _followEnabled) {
       _followDriverCamera();
     } else {
@@ -72,7 +88,7 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
   gmaps.LatLng _toGoogle(LatLng point) =>
       gmaps.LatLng(point.latitude, point.longitude);
 
-  static const _emptyInfo = gmaps.InfoWindow();
+  static final _emptyInfo = gmaps.InfoWindow();
 
   void _rebuildOverlays() {
     final points = resolveRoutePoints(widget.route, widget.stops);
@@ -100,15 +116,6 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
     final to = widget.route.toLocation;
 
     if (from != null) {
-      var startRotation = 0.0;
-      if (points.length >= 2) {
-        startRotation = headingBetween(
-          fromLat: points.first.latitude,
-          fromLng: points.first.longitude,
-          toLat: points[1].latitude,
-          toLng: points[1].longitude,
-        );
-      }
       markers.add(
         gmaps.Marker(
           markerId: const gmaps.MarkerId('start'),
@@ -117,9 +124,7 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
             gmaps.BitmapDescriptor.hueGreen,
           ),
           infoWindow: _emptyInfo,
-          rotation: startRotation,
-          flat: true,
-          anchor: const Offset(0.5, 0.5),
+          anchor: const Offset(0.5, 1.0),
         ),
       );
     }
@@ -154,6 +159,11 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
     for (final bus in widget.buses) {
       final loc = bus.currentLocation;
       if (loc == null) continue;
+      final busPoint = LatLng(loc.latitude, loc.longitude);
+      final heading = resolveMarkerHeading(
+        point: busPoint,
+        routePoints: points,
+      );
       markers.add(
         gmaps.Marker(
           markerId: gmaps.MarkerId('bus-${bus.busId}'),
@@ -162,6 +172,8 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
             gmaps.BitmapDescriptor.hueAzure,
           ),
           infoWindow: _emptyInfo,
+          rotation: heading,
+          flat: true,
           anchor: const Offset(0.5, 0.5),
         ),
       );
@@ -171,15 +183,11 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
     final circles = <gmaps.Circle>{};
     if (driver != null) {
       final driverPos = gmaps.LatLng(driver.latitude, driver.longitude);
-      circles.add(
-        gmaps.Circle(
-          circleId: const gmaps.CircleId('driver-accuracy'),
-          center: driverPos,
-          radius: 42,
-          fillColor: const Color(0xFF4285F4).withValues(alpha: 0.12),
-          strokeColor: const Color(0xFF4285F4).withValues(alpha: 0.28),
-          strokeWidth: 1,
-        ),
+      final driverPoint = LatLng(driver.latitude, driver.longitude);
+      final heading = resolveMarkerHeading(
+        point: driverPoint,
+        routePoints: points,
+        deviceHeading: widget.driverHeading,
       );
       markers.add(
         gmaps.Marker(
@@ -189,7 +197,7 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
             gmaps.BitmapDescriptor.hueAzure,
           ),
           infoWindow: _emptyInfo,
-          rotation: widget.driverHeading ?? 0,
+          rotation: heading,
           flat: true,
           anchor: const Offset(0.5, 0.5),
         ),
@@ -206,9 +214,38 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
     return _toGoogle(points.first);
   }
 
+  gmaps.LatLngBounds _expandBounds(
+    double minLat,
+    double maxLat,
+    double minLng,
+    double maxLng,
+  ) {
+    const minDelta = 0.002;
+    if ((maxLat - minLat).abs() < minDelta) {
+      final mid = (maxLat + minLat) / 2;
+      minLat = mid - minDelta / 2;
+      maxLat = mid + minDelta / 2;
+    }
+    if ((maxLng - minLng).abs() < minDelta) {
+      final mid = (maxLng + minLng) / 2;
+      minLng = mid - minDelta / 2;
+      maxLng = mid + minDelta / 2;
+    }
+    return gmaps.LatLngBounds(
+      southwest: gmaps.LatLng(minLat, minLng),
+      northeast: gmaps.LatLng(maxLat, maxLng),
+    );
+  }
+
+  String _cameraKeyForBounds(gmaps.LatLngBounds bounds, {bool follow = false}) {
+    final sw = bounds.southwest;
+    final ne = bounds.northeast;
+    return '${follow ? 'f' : 'b'}:${sw.latitude},${sw.longitude},${ne.latitude},${ne.longitude}';
+  }
+
   Future<void> _fitBounds() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null || _cameraBusy) return;
     final points = resolveRoutePoints(widget.route, widget.stops);
     final driver = widget.driverPosition;
     if (points.isEmpty && driver == null) return;
@@ -231,41 +268,73 @@ class _TrddkGoogleRouteMapState extends State<TrddkGoogleRouteMap> {
       maxLng = math.max(maxLng, driver.longitude);
     }
 
-    await controller.animateCamera(
-      gmaps.CameraUpdate.newLatLngBounds(
-        gmaps.LatLngBounds(
-          southwest: gmaps.LatLng(minLat, minLng),
-          northeast: gmaps.LatLng(maxLat, maxLng),
-        ),
-        widget.padding,
-      ),
-    );
+    final bounds = _expandBounds(minLat, maxLat, minLng, maxLng);
+    final key = _cameraKeyForBounds(bounds);
+    if (_lastCameraKey == key) return;
+
+    _cameraBusy = true;
+    try {
+      await controller
+          .animateCamera(
+            gmaps.CameraUpdate.newLatLngBounds(bounds, widget.padding),
+          )
+          .timeout(const Duration(seconds: 2));
+      _lastCameraKey = key;
+    } catch (_) {
+      try {
+        await controller.moveCamera(
+          gmaps.CameraUpdate.newLatLngBounds(bounds, widget.padding),
+        );
+        _lastCameraKey = key;
+      } catch (_) {}
+    } finally {
+      _cameraBusy = false;
+    }
   }
 
   Future<void> _followDriverCamera() async {
     final controller = _controller;
     final driver = widget.driverPosition;
-    if (controller == null || driver == null) return;
+    if (controller == null || driver == null || _cameraBusy) return;
 
-    await controller.animateCamera(
-      gmaps.CameraUpdate.newCameraPosition(
-        gmaps.CameraPosition(
-          target: gmaps.LatLng(driver.latitude, driver.longitude),
-          zoom: 16,
-          bearing: widget.driverHeading ?? 0,
-          tilt: 0,
-        ),
-      ),
-    );
+    final target = gmaps.LatLng(driver.latitude, driver.longitude);
+    final key = 'f:${target.latitude},${target.longitude}';
+    if (_lastCameraKey == key) return;
+
+    _cameraBusy = true;
+    try {
+      await controller
+          .animateCamera(
+            gmaps.CameraUpdate.newCameraPosition(
+              gmaps.CameraPosition(
+                target: target,
+                zoom: 16,
+                bearing: widget.driverHeading ?? 0,
+                tilt: 0,
+              ),
+            ),
+          )
+          .timeout(const Duration(seconds: 2));
+      _lastCameraKey = key;
+    } catch (_) {
+      try {
+        await controller.moveCamera(
+          gmaps.CameraUpdate.newLatLng(target),
+        );
+        _lastCameraKey = key;
+      } catch (_) {}
+    } finally {
+      _cameraBusy = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final mapId = TrddkGoogleMapsConfig.mapId.trim();
+    final mapId = TrddkGoogleMapsConfig.resolvedMapId;
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.borderRadius),
       child: gmaps.GoogleMap(
-        cloudMapId: mapId.isNotEmpty ? mapId : null,
+        cloudMapId: mapId,
         initialCameraPosition: gmaps.CameraPosition(
           target: _initialTarget(),
           zoom: 13,

@@ -16,6 +16,12 @@ import {
 } from "../auth/middleware";
 import { businessRef, getBusinessStats } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import {
+  listBusinessEmployees,
+  removeEmployeeFromBusiness,
+  updateEmployeeMembership,
+} from "../services/employees";
+import { sendPasswordSetupLink } from "../services/users";
 
 const router = Router();
 
@@ -321,5 +327,94 @@ router.delete("/:businessId", requireSuperAdmin, async (req, res) => {
     fail(res, (error as Error).message, 500);
   }
 });
+
+router.get(
+  "/:businessId/employees",
+  requirePermission("users:read", "drivers:read"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      const employees = await listBusinessEmployees(businessId);
+      ok(res, employees);
+    } catch (error) {
+      fail(res, (error as Error).message, 500);
+    }
+  }
+);
+
+router.patch(
+  "/:businessId/employees/:uid",
+  requirePermission("users:manage"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const uid = paramId(req.params.uid);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      await updateEmployeeMembership(businessId, uid, req.body ?? {});
+      ok(res, { updated: true });
+    } catch (error) {
+      fail(res, (error as Error).message, 400);
+    }
+  }
+);
+
+router.delete(
+  "/:businessId/employees/:uid",
+  requirePermission("users:manage"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const uid = paramId(req.params.uid);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      await removeEmployeeFromBusiness(businessId, uid);
+      ok(res, { removed: true });
+    } catch (error) {
+      fail(res, (error as Error).message, 400);
+    }
+  }
+);
+
+router.post(
+  "/:businessId/employees/:uid/resend-invite",
+  requirePermission("users:manage"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const uid = paramId(req.params.uid);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      const userDoc = await db.collection(COLLECTIONS.users).doc(uid).get();
+      if (!userDoc.exists) {
+        fail(res, "المستخدم غير موجود.", 404);
+        return;
+      }
+      const email = userDoc.data()?.email as string | undefined;
+      if (!email) {
+        fail(res, "لا يوجد إيميل.", 400);
+        return;
+      }
+      await sendPasswordSetupLink(email);
+      ok(res, { sent: true });
+    } catch (error) {
+      fail(res, (error as Error).message, 400);
+    }
+  }
+);
 
 export default router;

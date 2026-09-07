@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Shared map styling with the admin panel (Carto Dark Matter + route colors).
+/// Driver map tiles — OpenFreeMap fallback when Google Maps is unavailable.
 class DriverMapConfig {
   static const tilesUrl =
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
-  static const tileSubdomains = ['a', 'b', 'c', 'd'];
+      'https://tiles.openfreemap.org/osm/{z}/{x}/{y}.png';
+  static const tileSubdomains = <String>[];
 
   static const routeOrange = Color(0xFFEB4F26);
   static const startGreen = Color(0xFF4ADE80);

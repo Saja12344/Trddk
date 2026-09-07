@@ -45,9 +45,52 @@ List<LatLng> buildFallbackRoutePoints({
   return points;
 }
 
+const _endpointMergeMeters = 45.0;
+
+double _distanceMeters(LatLng a, LatLng b) {
+  const earthRadius = 6371000.0;
+  final dLat = (b.latitude - a.latitude) * math.pi / 180;
+  final dLng = (b.longitude - a.longitude) * math.pi / 180;
+  final lat1 = a.latitude * math.pi / 180;
+  final lat2 = b.latitude * math.pi / 180;
+  final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+  return earthRadius * 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h));
+}
+
+/// Ensures stored polylines visually reach configured from/to endpoints.
+List<LatLng> extendRoutePolylineEndpoints(
+  List<LatLng> points, {
+  LocationPlace? from,
+  LocationPlace? to,
+}) {
+  if (points.isEmpty) return points;
+  final result = [...points];
+
+  if (to != null) {
+    final end = LatLng(to.latitude, to.longitude);
+    if (_distanceMeters(result.last, end) > _endpointMergeMeters) {
+      result.add(end);
+    }
+  }
+  if (from != null) {
+    final start = LatLng(from.latitude, from.longitude);
+    if (_distanceMeters(result.first, start) > _endpointMergeMeters) {
+      result.insert(0, start);
+    }
+  }
+  return result;
+}
+
 List<LatLng> resolveRoutePoints(RouteModel route, List<StopModel> stops) {
   final decoded = decodeRoutePolyline(route.polyline);
-  if (decoded.length >= 2) return decoded;
+  if (decoded.length >= 2) {
+    return extendRoutePolylineEndpoints(
+      decoded,
+      from: route.fromLocation,
+      to: route.toLocation,
+    );
+  }
   return buildFallbackRoutePoints(
     from: route.fromLocation,
     to: route.toLocation,

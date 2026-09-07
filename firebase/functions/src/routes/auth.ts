@@ -236,6 +236,47 @@ router.post("/app-login-hint", async (req, res) => {
   }
 });
 
+router.post("/firebase-app-session", async (req, res) => {
+  try {
+    const { idToken, app } = req.body as {
+      idToken?: string;
+      app?: "driver" | "passenger";
+    };
+    if (!idToken?.trim() || !app) {
+      fail(res, "Invalid request.");
+      return;
+    }
+    const { createFirebaseAppSession } = await import(
+      "../services/firebaseAppSession"
+    );
+    const session = await createFirebaseAppSession(idToken, app);
+    ok(res, session);
+  } catch (error) {
+    fail(res, (error as Error).message, 401);
+  }
+});
+
+router.post("/app-send-password-setup", async (req, res) => {
+  try {
+    const { email, app } = req.body as {
+      email?: string;
+      app?: "driver" | "passenger" | "admin";
+    };
+    if (!email?.trim() || !app) {
+      fail(res, "Invalid request.");
+      return;
+    }
+    const { resolveAppLoginHint, sendPasswordSetupLink } = await import(
+      "../services/users"
+    );
+    await resolveAppLoginHint(email, app);
+    await sendPasswordSetupLink(email);
+    ok(res, { sent: true });
+  } catch (error) {
+    fail(res, (error as Error).message, 400);
+  }
+});
+
 router.post("/passenger-business-session", async (req, res) => {
   try {
     const { verificationToken, businessId } = req.body as {

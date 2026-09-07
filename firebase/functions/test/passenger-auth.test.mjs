@@ -30,13 +30,22 @@ test("admin membership with passengerAccess true is authorized", () => {
   assert.equal(membershipAllowsPassenger(m), true);
 });
 
-test("admin membership with passengerAccess false stays blocked", () => {
+test("company admin may use passenger app for their company", () => {
   const m = membership({
     role: "business_admin",
     passengerAccess: false,
   });
-  assert.equal(resolvesPassengerAccess(m), false);
-  assert.equal(membershipAllowsPassenger(m), false);
+  assert.equal(resolvesPassengerAccess(m), true);
+  assert.equal(membershipAllowsPassenger(m), true);
+});
+
+test("company viewer may use passenger app for their company", () => {
+  const m = membership({
+    role: "business_viewer",
+    passengerAccess: false,
+  });
+  assert.equal(resolvesPassengerAccess(m), true);
+  assert.equal(membershipAllowsPassenger(m), true);
 });
 
 test("legacy employee without explicit passengerAccess remains authorized", () => {

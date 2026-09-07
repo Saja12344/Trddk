@@ -14,11 +14,12 @@
     "node": "20"
   },
   "dependencies": {
-    "@tardadi/shared": "*",
+    "@tardadi/shared": "file:./vendor/@tardadi/shared",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "firebase-admin": "^13.4.0",
-    "firebase-functions": "^6.3.2"
+    "firebase-functions": "^6.3.2",
+    "nodemailer": "^6.10.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

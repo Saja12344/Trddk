@@ -1,10 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AdminRole, AdminSession, Permission } from "@tardadi/shared";
-import { roleHasPermission } from "@tardadi/shared";
+import { isAdminPanelRole, roleHasPermission } from "@tardadi/shared";
 import { getJwtSecret, verifyJwt } from "./crypto";
 
 export interface AdminAuthContext extends AdminSession {
   userId: string;
+  firebaseUser?: {
+    uid: string;
+    primaryRole?: string;
+  };
 }
 
 declare global {
@@ -37,6 +41,9 @@ export function parseAdminAuth(req: Request): AdminAuthContext | null {
 
   const payload = verifyJwt(token, getJwtSecret());
   if (!payload) return null;
+
+  // Passenger/driver JWTs share the same secret but are not admin sessions.
+  if (!isAdminPanelRole(payload.role)) return null;
 
   return {
     userId: payload.sub,

@@ -58,7 +58,9 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
   Future<void> _loadRoutes({bool silent = false}) async {
     try {
       if (!silent && mounted) setState(() => _loading = true);
-      final apiRoutes = await _api.getRoutes();
+      final apiRoutes = await _api.getRoutes(
+        publicScope: !UserSession.instance.hasBusinessSession,
+      );
       if (!mounted) return;
 
       final activeRoutes = apiRoutes
@@ -96,6 +98,11 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
   List<RouteListItem> get _publicRoutes =>
       _filteredRoutes.where((route) => !route.isBusiness).toList();
 
+  bool _hasVisibleRouteCards(bool showBusiness) =>
+      (showBusiness && _businessRoutes.isNotEmpty) ||
+      _publicRoutes.isNotEmpty ||
+      (!showBusiness && _businessRoutes.isNotEmpty);
+
   void _openRoute(RouteListItem route) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -113,6 +120,7 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
     final scale = OnboardingScale(context);
     final showBusiness = UserSession.instance.isBusiness;
     final l10n = context.l10n;
+    final hasVisibleRouteCards = _hasVisibleRouteCards(showBusiness);
 
     return Scaffold(
       backgroundColor: OnboardingTheme.background,
@@ -177,8 +185,13 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
                                   ..._publicRoutes.map(
                                     (route) => _buildRouteCard(route, l10n),
                                   ),
+                                ] else if (!showBusiness &&
+                                    _businessRoutes.isNotEmpty) ...[
+                                  ..._businessRoutes.map(
+                                    (route) => _buildRouteCard(route, l10n),
+                                  ),
                                 ],
-                                if (_filteredRoutes.isEmpty)
+                                if (!hasVisibleRouteCards)
                                   Padding(
                                     padding: EdgeInsets.only(top: scale.s(56)),
                                     child: Column(

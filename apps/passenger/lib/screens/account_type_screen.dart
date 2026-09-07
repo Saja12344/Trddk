@@ -21,16 +21,18 @@ class AccountTypeScreen extends StatefulWidget {
 class _AccountTypeScreenState extends State<AccountTypeScreen> {
   AccountType _selected = AccountType.personal;
 
-  void _continue() {
-    UserSession.instance.setAccountType(_selected);
+  Future<void> _continue() async {
+    await UserSession.instance.setAccountType(_selected);
 
     if (_selected == AccountType.personal) {
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(builder: (_) => const RoutesMainScreen()),
       );
       return;
     }
 
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => EnterEmailScreen(accountType: AccountType.business),

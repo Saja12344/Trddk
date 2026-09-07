@@ -1,0 +1,13 @@
+{
+  "name": "@tardadi/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./pkg/index.js",
+  "types": "./pkg/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./pkg/index.d.ts",
+      "default": "./pkg/index.js"
+    }
+  }
+}

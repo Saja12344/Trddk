@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=trddk-dart-defines.sh
+source "$ROOT/scripts/trddk-dart-defines.sh"
 IOS_DEVICE_NAME="${IOS_DEVICE_NAME:-iPhone 17}"
 IOS_DEVICE_ID="${IOS_DEVICE_ID:-}"
 
@@ -36,4 +38,4 @@ echo "Booting iOS simulator: $IOS_DEVICE_NAME ($IOS_DEVICE_ID)"
 xcrun simctl boot "$IOS_DEVICE_ID" 2>/dev/null || true
 open -a Simulator --args -CurrentDeviceUDID "$IOS_DEVICE_ID"
 
-flutter run -d "$IOS_DEVICE_ID"
+flutter run -d "$IOS_DEVICE_ID" "${TRDDK_DART_DEFINES[@]}"

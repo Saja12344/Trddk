@@ -278,12 +278,14 @@ class RouteLiveSnapshot {
     required this.stops,
     required this.buses,
     required this.liveBusCount,
+    this.activeBusCount = 0,
   });
 
   final RouteModel route;
   final List<StopModel> stops;
   final List<BusModel> buses;
   final int liveBusCount;
+  final int activeBusCount;
 
   factory RouteLiveSnapshot.fromJson(Map<String, dynamic> json) {
     return RouteLiveSnapshot(
@@ -295,6 +297,7 @@ class RouteLiveSnapshot {
           .map((e) => BusModel.fromJson(e as Map<String, dynamic>))
           .toList(),
       liveBusCount: (json['liveBusCount'] as num?)?.toInt() ?? 0,
+      activeBusCount: (json['activeBusCount'] as num?)?.toInt() ?? 0,
     );
   }
 }

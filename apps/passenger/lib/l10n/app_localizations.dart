@@ -23,6 +23,7 @@ class AppLocalizations {
 
   String get next => isArabic ? 'التالي' : 'Next';
   String get save => isArabic ? 'حفظ' : 'Save';
+  String get logout => isArabic ? 'تسجيل الخروج' : 'Log out';
   String get verify => isArabic ? 'تحقق' : 'Verify';
   String get onboardingStepPlan => isArabic ? '٠١ · خطّط' : '01 · PLAN';
 
@@ -159,7 +160,27 @@ class AppLocalizations {
   String resendIn(String timer) =>
       isArabic ? 'إعادة الإرسال خلال $timer' : 'Resend in $timer';
 
+  String codeExpiresIn(String timer) => isArabic
+      ? 'ينتهي الرمز خلال $timer'
+      : 'Code expires in $timer';
+
   String get resendCode => isArabic ? 'إعادة إرسال الرمز' : 'Resend Code';
+
+  String get emailNotRegisteredWithCompany => isArabic
+      ? 'هذا البريد غير مسجّل لدى شركتك. تأكد أنك اخترت «أعمال» وليس «شخصي»، أو تواصل مع الإدارة.'
+      : 'This email is not registered with your company. Choose Business (not Personal), or contact your employer.';
+
+  String get chooseBusinessModeError => isArabic
+      ? 'تأكد أنك اخترت «أعمال» عند الدخول. إذا استمرت المشكلة تواصل مع الإدارة.'
+      : 'Choose Business mode on login. If this persists, contact your employer.';
+
+  String get invalidOrExpiredOtp => isArabic
+      ? 'رمز غير صحيح أو منتهي. اطلب «إعادة إرسال» واستخدم آخر رمز وصلك.'
+      : 'Invalid or expired code. Tap Resend and use the latest code.';
+
+  String get tooManyOtpAttempts => isArabic
+      ? 'محاولات كثيرة. اطلب رمزاً جديداً.'
+      : 'Too many attempts. Request a new code.';
 
   String get stationSearchHint =>
       isArabic ? 'رقم الباص' : 'Bus number';
@@ -171,17 +192,19 @@ class AppLocalizations {
 
   String get liveBadge => isArabic ? 'مباشر' : 'Live';
 
-  String get noLiveBuses => isArabic
-      ? 'لا يوجد باص محدّث على هذا الخط حالياً'
-      : 'No live buses on this route right now';
+  String get noLiveBuses =>
+      isArabic ? 'لا يوجد باص حالياً' : 'No bus available';
 
   String liveBusesOnRoute(int count) => isArabic
       ? '$count باص محدّث'
       : '$count live bus${count == 1 ? '' : 'es'}';
 
-  String minutesLabel(int minutes) => isArabic
-      ? '${minutes.toString().padLeft(2, '0')} د'
-      : '${minutes.toString().padLeft(2, '0')} min';
+  String minutesLabel(int minutes) {
+    if (minutes <= 0) return isArabic ? '—' : '—';
+    return isArabic
+        ? '$minutes د'
+        : '$minutes min';
+  }
 
   String routeStopTitle(String routeName, String stopLabel) {
     final name = localizeRouteName(routeName);
@@ -221,9 +244,9 @@ class AppLocalizations {
 
   String crowdingLabel(String value) {
     return switch (value.toLowerCase()) {
-      'low' => isArabic ? 'منخفض' : 'Low',
-      'medium' => isArabic ? 'متوسط' : 'Medium',
-      'high' => isArabic ? 'مرتفع' : 'High',
+      'low' => isArabic ? 'ازدحام منخفض' : 'Low crowding',
+      'medium' => isArabic ? 'ازدحام متوسط' : 'Moderate crowding',
+      'high' => isArabic ? 'ازدحام عالي' : 'High crowding',
       _ => value,
     };
   }

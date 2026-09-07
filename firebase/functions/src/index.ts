@@ -10,6 +10,7 @@ import driversRouter from "./routes/drivers";
 import tripsRouter from "./routes/trips";
 import gpsRouter from "./routes/gps";
 import remindersRouter from "./routes/reminders";
+import usersRouter from "./routes/users";
 import { attachAdminAuth } from "./auth/middleware";
 
 const app = express();
@@ -30,5 +31,6 @@ app.use("/api/drivers", driversRouter);
 app.use("/api/trips", tripsRouter);
 app.use("/api/gps", gpsRouter);
 app.use("/api/reminders", remindersRouter);
+app.use("/api/users", usersRouter);
 
 export const api = functions.https.onRequest(app);

@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../services/passenger_api.dart';
 import '../services/user_session.dart';
 import '../ui/trddk_typography.dart';
+import '../widgets/left_back_button.dart';
 import '../widgets/onboarding/onboarding_primary_button.dart';
 import '../widgets/onboarding/onboarding_scale.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
@@ -79,7 +80,14 @@ class _EnterEmailScreenState extends State<EnterEmailScreen> {
           padding: EdgeInsets.symmetric(horizontal: scale.horizontalPadding),
           child: Column(
             children: [
-              SizedBox(height: scale.s(24)),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: LeftBackButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+              SizedBox(height: scale.s(8)),
               const Center(child: TardadiLogoIcon(size: 40)),
               SizedBox(height: scale.s(24)),
               Text(
