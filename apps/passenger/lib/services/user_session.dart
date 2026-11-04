@@ -14,8 +14,10 @@ class UserSession extends ChangeNotifier {
   static const _sessionKey = 'passenger_business_session_v1';
   static const _onboardingKey = 'passenger_onboarding_completed_v1';
   static const _accountTypeKey = 'passenger_account_type_v1';
+  static const _reviewTokenKey = 'passenger_store_review_token_v1';
 
   AccountType? accountType;
+  bool storeReview = false;
   AppLanguage language = AppLanguage.english;
   String? email;
   String? phoneNumber;
@@ -42,12 +44,23 @@ class UserSession extends ChangeNotifier {
 
     if (sessionToken != null && businessId != null) {
       accountType = AccountType.business;
+      storeReview = false;
+      await prefs.remove(_reviewTokenKey);
     } else {
-      final savedType = prefs.getString(_accountTypeKey);
-      if (savedType == 'business') {
-        accountType = AccountType.business;
-      } else if (savedType == 'personal') {
+      final reviewToken = prefs.getString(_reviewTokenKey);
+      if (reviewToken != null && reviewToken.isNotEmpty) {
+        storeReview = true;
+        sessionToken = reviewToken;
+        businessId = null;
         accountType = AccountType.personal;
+      } else {
+        storeReview = false;
+        final savedType = prefs.getString(_accountTypeKey);
+        if (savedType == 'business') {
+          accountType = AccountType.business;
+        } else if (savedType == 'personal') {
+          accountType = AccountType.personal;
+        }
       }
     }
 
@@ -111,6 +124,30 @@ class UserSession extends ChangeNotifier {
     await prefs.setString('${_sessionKey}_businessName', businessName);
     await prefs.setString('${_sessionKey}_email', email);
     await prefs.setString(_accountTypeKey, 'business');
+    await prefs.remove(_reviewTokenKey);
+    storeReview = false;
+    notifyListeners();
+  }
+
+  Future<void> setStoreReviewSession({
+    required String phone,
+    required String sessionToken,
+  }) async {
+    storeReview = true;
+    phoneNumber = phone;
+    this.sessionToken = sessionToken;
+    businessId = null;
+    businessName = null;
+    email = null;
+    accountType = AccountType.personal;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_reviewTokenKey, sessionToken);
+    await prefs.setString(_accountTypeKey, 'personal');
+    await prefs.remove('${_sessionKey}_token');
+    await prefs.remove('${_sessionKey}_businessId');
+    await prefs.remove('${_sessionKey}_businessName');
+    await prefs.remove('${_sessionKey}_email');
     notifyListeners();
   }
 

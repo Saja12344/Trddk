@@ -9,6 +9,7 @@ import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/onboarding/tardadi_logo.dart';
 import '../widgets/route_card.dart';
 import 'enter_email_screen.dart';
+import 'enter_phone_screen.dart';
 import 'routes_main_screen.dart';
 
 class AccountTypeScreen extends StatefulWidget {
@@ -155,7 +156,24 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
                 label: l10n.next,
                 onPressed: _continue,
               ),
-              SizedBox(height: scale.s(24)),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const EnterPhoneScreen(),
+                    ),
+                  );
+                },
+                child: Text(
+                  l10n.phoneLogin,
+                  style: TrddkTypography.text(
+                    color: OnboardingTheme.white.withValues(alpha: 0.82),
+                    fontSize: scale.s(14),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              SizedBox(height: scale.s(8)),
             ],
           ),
         ),

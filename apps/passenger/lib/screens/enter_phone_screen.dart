@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/store_review.dart';
 import '../services/user_session.dart';
 import '../widgets/onboarding/onboarding_scale.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
@@ -9,9 +10,7 @@ import '../widgets/onboarding/verification_header.dart';
 import 'verify_phone_screen.dart';
 
 class EnterPhoneScreen extends StatefulWidget {
-  const EnterPhoneScreen({super.key, this.fromSettings = false});
-
-  final bool fromSettings;
+  const EnterPhoneScreen({super.key});
 
   @override
   State<EnterPhoneScreen> createState() => _EnterPhoneScreenState();
@@ -42,10 +41,15 @@ class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
       return;
     }
 
+    if (!isPassengerStoreReviewPhone(digits)) {
+      setState(() => _error = context.l10n.phoneLoginUnavailable);
+      return;
+    }
+
     UserSession.instance.setPhoneNumber('+966$digits');
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => VerifyPhoneScreen(fromSettings: widget.fromSettings),
+        builder: (_) => const VerifyPhoneScreen(),
       ),
     );
   }

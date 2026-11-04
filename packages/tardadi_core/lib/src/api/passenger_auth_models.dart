@@ -52,6 +52,27 @@ class PassengerOtpVerifyResult {
   final List<PassengerMembershipSummary> memberships;
 }
 
+class PassengerReviewSessionResult {
+  const PassengerReviewSessionResult({
+    required this.sessionToken,
+    required this.scope,
+  });
+
+  factory PassengerReviewSessionResult.fromJson(Map<String, dynamic> json) {
+    final businessId = json['businessId'];
+    if (businessId != null) {
+      throw Exception('Review session cannot be tied to a company.');
+    }
+    return PassengerReviewSessionResult(
+      sessionToken: json['sessionToken'] as String,
+      scope: json['scope'] as String? ?? 'public',
+    );
+  }
+
+  final String sessionToken;
+  final String scope;
+}
+
 class PassengerBusinessSessionResult {
   const PassengerBusinessSessionResult({
     required this.sessionToken,

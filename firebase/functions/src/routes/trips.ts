@@ -10,8 +10,11 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, getOrgId, ok } from "../utils";
+import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
+
+router.use(rejectStoreReviewAccess);
 
 async function listTripsForBusiness(businessId: string, status?: string) {
   let query: Query = businessRef(db, businessId).collection(COLLECTIONS.trips);

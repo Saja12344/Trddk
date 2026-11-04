@@ -3,8 +3,11 @@ import type { Query } from "firebase-admin/firestore";
 import { COLLECTIONS, DEFAULT_REMINDER_MINUTES } from "@tardadi/shared";
 import { db } from "../firebase";
 import { fail, getOrgId, ok } from "../utils";
+import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
+
+router.use(rejectStoreReviewAccess);
 
 router.get("/", async (req, res) => {
   try {

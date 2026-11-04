@@ -9,8 +9,23 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import {
+  isPublicPassengerRoute,
+  omitReviewPrivateFields,
+  rejectStoreReviewAccess,
+  requestIsPassengerReview,
+  STORE_REVIEW_FORBIDDEN,
+} from "../services/passengerReview";
 
 const router = Router();
+
+router.use((req, res, next) => {
+  if (req.method === "GET") {
+    next();
+    return;
+  }
+  rejectStoreReviewAccess(req, res, next);
+});
 
 const LIVE_GPS_WINDOW_MS = 60_000;
 
@@ -82,19 +97,24 @@ async function listRoutesForBusiness(businessId: string) {
 router.get("/", optionalAdminWithPermission("routes:read"), async (req, res) => {
   try {
     const scope = req.query.scope as string | undefined;
+    const review = requestIsPassengerReview(req);
 
-    // Passenger personal mode — list every active public route across businesses.
-    if (!req.adminAuth && scope === "public") {
+    // Personal passengers and the store-review session only see public routes.
+    if (review || (!req.adminAuth && scope === "public")) {
       const snap = await db.collection(COLLECTIONS.businesses).get();
       const businessIds = snap.docs.map((doc) => doc.id);
       const routes = await mapAcrossBusinesses(db, businessIds, listRoutesForBusiness);
       ok(
         res,
-        routes.filter((route) => {
-          const r = route as { status?: string; accessMode?: string };
-          // Match admin UI: anything that is not explicitly private is public.
-          return r.status === "active" && r.accessMode !== "private";
-        })
+        routes
+          .filter((route) =>
+            isPublicPassengerRoute(route as { status?: string; accessMode?: string })
+          )
+          .map((route) =>
+            review
+              ? omitReviewPrivateFields(route as Record<string, unknown>)
+              : route
+          )
       );
       return;
     }
@@ -125,6 +145,16 @@ router.get("/:routeId/live", async (req, res) => {
     const routeDoc = await routeRef.get();
     if (!routeDoc.exists) {
       fail(res, "Route not found", 404);
+      return;
+    }
+
+    const review = requestIsPassengerReview(req);
+    const routeData = routeDoc.data() ?? {};
+    if (
+      review &&
+      !isPublicPassengerRoute(routeData as { status?: string; accessMode?: string })
+    ) {
+      fail(res, STORE_REVIEW_FORBIDDEN, 403);
       return;
     }
 
@@ -161,7 +191,7 @@ router.get("/:routeId/live", async (req, res) => {
       const isLive = isRecentlyUpdated(busData.lastSeenAt as string | undefined);
       if (isLive) liveBusCount += 1;
 
-      buses.push({
+      const busPayload = {
         ...withBusinessId(businessId, { busId: busDoc.id, ...busData }),
         tripId: tripDoc.id,
         lastArrivedAt:
@@ -173,19 +203,22 @@ router.get("/:routeId/live", async (req, res) => {
           (busData.lastArrivedStopId as string | undefined) ??
           null,
         isLive,
-      });
+      };
+      buses.push(review ? omitReviewPrivateFields(busPayload) : busPayload);
     }
 
-    ok(res, {
-      route: withBusinessId(businessId, {
-        routeId,
-        ...routeDoc.data(),
-        stopsCount: totalStationCount(stops.length, {
-          hasFrom: !!routeDoc.data()?.fromLocation,
-          hasTo: !!routeDoc.data()?.toLocation,
-        }),
-        intermediateStopsCount: stops.length,
+    const routePayload = withBusinessId(businessId, {
+      routeId,
+      ...routeData,
+      stopsCount: totalStationCount(stops.length, {
+        hasFrom: !!routeData.fromLocation,
+        hasTo: !!routeData.toLocation,
       }),
+      intermediateStopsCount: stops.length,
+    });
+
+    ok(res, {
+      route: review ? omitReviewPrivateFields(routePayload) : routePayload,
       stops,
       buses,
       liveBusCount,
@@ -223,18 +256,27 @@ router.get("/:routeId", optionalAdminWithPermission("routes:read"), async (req, 
     }));
 
     const routeData = routeDoc.data()!;
+    const review = requestIsPassengerReview(req);
+    if (
+      review &&
+      !isPublicPassengerRoute(routeData as { status?: string; accessMode?: string })
+    ) {
+      fail(res, STORE_REVIEW_FORBIDDEN, 403);
+      return;
+    }
     const intermediateStops = stopsSnapshot.size;
+    const routePayload = withBusinessId(businessId, {
+      routeId,
+      ...routeData,
+      stopsCount: totalStationCount(intermediateStops, {
+        hasFrom: !!routeData.fromLocation,
+        hasTo: !!routeData.toLocation,
+      }),
+      intermediateStopsCount: intermediateStops,
+    });
 
     ok(res, {
-      route: withBusinessId(businessId, {
-        routeId,
-        ...routeData,
-        stopsCount: totalStationCount(intermediateStops, {
-          hasFrom: !!routeData.fromLocation,
-          hasTo: !!routeData.toLocation,
-        }),
-        intermediateStopsCount: intermediateStops,
-      }),
+      route: review ? omitReviewPrivateFields(routePayload) : routePayload,
       stops,
     });
   } catch (error) {

@@ -10,8 +10,11 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
+
+router.use(rejectStoreReviewAccess);
 
 async function listBusesForBusiness(
   businessId: string,

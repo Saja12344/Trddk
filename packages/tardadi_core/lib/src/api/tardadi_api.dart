@@ -236,6 +236,20 @@ class TardadiApi {
     );
   }
 
+  Future<PassengerReviewSessionResult> passengerReviewLogin({
+    required String phone,
+    required String code,
+  }) {
+    return _request(
+      '/api/auth/passenger-review-login',
+      method: 'POST',
+      body: {'phone': phone, 'code': code},
+      parser: (data) => PassengerReviewSessionResult.fromJson(
+        data as Map<String, dynamic>,
+      ),
+    );
+  }
+
   Future<PassengerBusinessSessionResult> passengerBusinessSession({
     required String verificationToken,
     required String businessId,

@@ -127,6 +127,20 @@ class AppLocalizations {
   String get invalidPhone =>
       isArabic ? 'أدخل رقم جوال صحيح' : 'Enter a valid phone number';
 
+  String get phoneLogin =>
+      isArabic ? 'الدخول برقم الجوال' : 'Continue with phone number';
+
+  String get phoneLoginUnavailable => isArabic
+      ? 'هذا الرقم يستخدم الحساب الشخصي أو بريد الشركة.'
+      : 'Use personal mode or your company email for this number.';
+
+  String get reviewCodeSubtitle =>
+      isArabic ? 'أدخل رمز التحقق' : 'Enter the verification code';
+
+  String get reviewCodeRejected => isArabic
+      ? 'رمز التحقق غير صحيح.'
+      : 'The verification code is incorrect.';
+
   String get enterYourEmail =>
       isArabic ? 'أدخل بريدك الإلكتروني' : 'Enter your email';
 

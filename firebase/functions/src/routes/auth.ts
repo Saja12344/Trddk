@@ -3,6 +3,11 @@ import { COLLECTIONS, normalizePhone } from "@tardadi/shared";
 import type { Driver, Bus, Route, Stop } from "@tardadi/shared";
 import { db } from "../firebase";
 import { getJwtSecret, signJwt, verifyPassword } from "../auth/crypto";
+import { consumeRateLimit } from "../auth/rateLimit";
+import {
+  reviewLoginDecision,
+  signPassengerReviewToken,
+} from "../services/passengerReview";
 import { fail, getOrgId, ok } from "../utils";
 import { withBusinessId } from "../auth/scope";
 
@@ -179,6 +184,38 @@ router.post("/driver-login", async (req, res) => {
     ok(res, { driver, bus, route, stops, tripId });
   } catch (error) {
     fail(res, (error as Error).message, 500);
+  }
+});
+
+router.post("/passenger-review-login", async (req, res) => {
+  try {
+    const phone = String(req.body?.phone ?? "");
+    const code = String(req.body?.code ?? "");
+    const normalized = normalizePhone(phone);
+    const rate = consumeRateLimit(
+      `passenger-review:${normalized || "invalid"}`,
+      12,
+      15 * 60 * 1000
+    );
+    if (!rate.allowed) {
+      fail(res, "محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.", 429);
+      return;
+    }
+
+    const decision = reviewLoginDecision(phone, code);
+    if (!decision.ok) {
+      fail(res, "رمز التحقق غير صحيح.", 401);
+      return;
+    }
+
+    ok(res, {
+      sessionToken: signPassengerReviewToken(decision.phone),
+      scope: "public",
+      role: "passenger_review",
+      businessId: null,
+    });
+  } catch (error) {
+    fail(res, (error as Error).message, 400);
   }
 });
 

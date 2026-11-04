@@ -3,8 +3,11 @@ import { COLLECTIONS, isWithinGeofence } from "@tardadi/shared";
 import type { GeoPoint } from "@tardadi/shared";
 import { db } from "../firebase";
 import { fail, getOrgId, ok } from "../utils";
+import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
+
+router.use(rejectStoreReviewAccess);
 
 router.post("/", async (req, res) => {
   try {
