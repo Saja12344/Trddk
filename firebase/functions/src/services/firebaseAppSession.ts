@@ -1,6 +1,14 @@
 import type { AuthenticatedUser } from "@tardadi/shared";
-import { resolveUserFromIdToken } from "../auth/firebaseAuth";
-import { loadDriverSessionFromBusiness } from "./driverSession";
+import { normalizePhone } from "@tardadi/shared";
+import { admin } from "../firebase";
+import {
+  loadAuthenticatedUser,
+  verifyFirebaseIdToken,
+} from "../auth/firebaseAuth";
+import {
+  loadDriverSessionByPhone,
+  loadDriverSessionFromBusiness,
+} from "./driverSession";
 
 function driverMembership(user: AuthenticatedUser) {
   return user.memberships.find(
@@ -28,19 +36,33 @@ export async function createFirebaseAppSession(
   idToken: string,
   app: "driver" | "passenger"
 ) {
-  const user = await resolveUserFromIdToken(idToken);
-  if (!user) {
+  const decoded = await verifyFirebaseIdToken(idToken);
+  if (!decoded?.uid) {
+    throw new Error("Invalid credentials.");
+  }
+
+  const authUser = await admin.auth().getUser(decoded.uid);
+  if (authUser.disabled) {
     throw new Error("Invalid credentials.");
   }
 
   if (app === "driver") {
-    if (!userMayUseDriverApp(user)) {
-      throw new Error("This account is not authorized for the driver app.");
+    const user = await loadAuthenticatedUser(decoded.uid);
+    if (user && userMayUseDriverApp(user)) {
+      return createDriverAppSession(user);
     }
-    return createDriverAppSession(user);
+    const phone = decoded.phone_number || authUser.phoneNumber;
+    if (!phone) {
+      throw new Error("Phone number is not registered. Contact your employer.");
+    }
+    return loadDriverSessionByPhone("demo-org", phone, normalizePhone);
   }
 
   if (app === "passenger") {
+    const user = await loadAuthenticatedUser(decoded.uid);
+    if (!user) {
+      throw new Error("Invalid credentials.");
+    }
     return { verified: true as const };
   }
 

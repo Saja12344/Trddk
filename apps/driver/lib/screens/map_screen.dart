@@ -54,6 +54,7 @@ class _MapScreenState extends State<MapScreen>
 
   TardadiApi get _api => createDriverApi(
         organizationId: _session.driver.businessId,
+        authToken: _session.sessionToken,
       );
 
   List<StopModel> get _orderedStops {

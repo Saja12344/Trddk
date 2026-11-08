@@ -13,7 +13,9 @@ import {
 import { verifyJwt, getJwtSecret } from "../dist/auth/crypto.js";
 import { sendSms } from "../dist/auth/sms.js";
 
-const REVIEW_CODE = "84729163";
+process.env.ADMIN_JWT_SECRET ??= "unit-test-jwt-secret-32chars-minimum!";
+const REVIEW_CODE = "11223344";
+process.env.PASSENGER_REVIEW_OTP = REVIEW_CODE;
 
 test("review phone normalizes to the store number only", () => {
   assert.equal(isStoreReviewPhone("+966500300001"), true);
@@ -23,7 +25,22 @@ test("review phone normalizes to the store number only", () => {
   assert.equal(isStoreReviewPhone("+966511111111"), false);
 });
 
+test("review login fails closed unless the environment code is 8 digits", () => {
+  const previous = process.env.PASSENGER_REVIEW_OTP;
+  try {
+    delete process.env.PASSENGER_REVIEW_OTP;
+    assert.equal(expectedReviewOtp(), null);
+    assert.equal(reviewLoginDecision(STORE_REVIEW_PHONE, REVIEW_CODE).ok, false);
+    process.env.PASSENGER_REVIEW_OTP = "1234";
+    assert.equal(expectedReviewOtp(), null);
+    assert.equal(reviewLoginDecision(STORE_REVIEW_PHONE, "1234").ok, false);
+  } finally {
+    process.env.PASSENGER_REVIEW_OTP = previous;
+  }
+});
+
 test("fixed review code is accepted only for the review phone", () => {
+  process.env.PASSENGER_REVIEW_OTP = REVIEW_CODE;
   assert.equal(expectedReviewOtp(), REVIEW_CODE);
   const ok = reviewLoginDecision(STORE_REVIEW_PHONE, REVIEW_CODE);
   assert.equal(ok.ok, true);

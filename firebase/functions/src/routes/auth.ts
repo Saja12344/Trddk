@@ -1,15 +1,18 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { COLLECTIONS, normalizePhone } from "@tardadi/shared";
-import type { Driver, Bus, Route, Stop } from "@tardadi/shared";
 import { db } from "../firebase";
 import { getJwtSecret, signJwt, verifyPassword } from "../auth/crypto";
 import { consumeRateLimit } from "../auth/rateLimit";
+import {
+  clientRateKey,
+  DRIVER_LOGIN_DENIED,
+  driverLoginDecision,
+} from "../auth/driverAccess";
 import {
   reviewLoginDecision,
   signPassengerReviewToken,
 } from "../services/passengerReview";
 import { fail, getOrgId, ok } from "../utils";
-import { withBusinessId } from "../auth/scope";
 
 const router = Router();
 
@@ -79,111 +82,103 @@ router.post("/admin-login", async (req, res) => {
   }
 });
 
-router.post("/driver-login", async (req, res) => {
+function failAuth(res: Response, error: unknown, fallbackStatus = 401): void {
+  const message = (error as Error).message || "";
+  if (/محاولات كثيرة/.test(message)) {
+    fail(res, message, 429);
+    return;
+  }
+  if (failDriverLookup(res, error)) return;
+  fail(res, message, fallbackStatus);
+}
+
+function loginRateAllowed(res: Response, scope: string, reqKey: string): boolean {
+  const rate = consumeRateLimit(`${scope}:${reqKey}`, 30, 15 * 60 * 1000);
+  if (rate.allowed) return true;
+  fail(res, "محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.", 429);
+  return false;
+}
+
+function failDriverLookup(res: Response, error: unknown): boolean {
+  const message = (error as Error).message || "";
+  if (/not registered/i.test(message)) {
+    fail(res, "رقم الجوال غير مسجل. تواصل مع الإدارة.", 401);
+    return true;
+  }
+  if (/inactive/i.test(message)) {
+    fail(res, "حساب السائق غير نشط. تواصل مع الإدارة.", 403);
+    return true;
+  }
+  if (/not assigned/i.test(message)) {
+    fail(res, "لم يتم تعيين خط أو باص لك بعد. تواصل مع الإدارة.", 403);
+    return true;
+  }
+  return false;
+}
+
+router.post("/driver-start-login", async (req, res) => {
   try {
     const orgId = getOrgId(req);
-    const businessId = orgId;
-    const { phone } = req.body;
+    const { phone } = req.body as { phone?: string };
 
-    if (!phone) {
-      fail(res, "phone is required");
+    if (!phone?.trim()) {
+      fail(res, "اكتب رقم الجوال.");
       return;
     }
+    if (!loginRateAllowed(res, "driver-start", clientRateKey(req))) return;
 
-    const normalizedPhone = normalizePhone(phone);
-
-    const driversSnapshot = await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
-      .collection(COLLECTIONS.drivers)
-      .where("phone", "==", normalizedPhone)
-      .where("status", "==", "active")
-      .limit(1)
-      .get();
-
-    if (driversSnapshot.empty) {
-      fail(res, "رقم الجوال غير مسجل. تواصل مع الإدارة.", 401);
-      return;
-    }
-
-    const driverDoc = driversSnapshot.docs[0];
-    const driverData = driverDoc.data();
-    const driver: Driver = withBusinessId(businessId, {
-      driverId: driverDoc.id,
-      name: driverData.name,
-      phone: driverData.phone,
-      driverCode: driverData.driverCode,
-      assignedRouteId: driverData.assignedRouteId,
-      assignedBusId: driverData.assignedBusId,
-      status: driverData.status,
-    }) as Driver;
-
-    if (!driver.assignedRouteId || !driver.assignedBusId) {
-      fail(res, "لم يتم تعيين خط أو باص لك بعد. تواصل مع الإدارة.", 403);
-      return;
-    }
-
-    const busDoc = await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
-      .collection(COLLECTIONS.buses)
-      .doc(driver.assignedBusId)
-      .get();
-
-    if (!busDoc.exists) {
-      fail(res, "الباص المعيّن غير موجود", 404);
-      return;
-    }
-
-    const bus: Bus = withBusinessId(businessId, {
-      busId: busDoc.id,
-      ...(busDoc.data() as Omit<Bus, "busId" | "businessId" | "organizationId">),
-    }) as Bus;
-
-    const routeDoc = await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
-      .collection(COLLECTIONS.routes)
-      .doc(driver.assignedRouteId)
-      .get();
-
-    if (!routeDoc.exists) {
-      fail(res, "الخط المعيّن غير موجود", 404);
-      return;
-    }
-
-    const route: Route = withBusinessId(businessId, {
-      routeId: routeDoc.id,
-      ...(routeDoc.data() as Omit<Route, "routeId" | "businessId" | "organizationId">),
-    }) as Route;
-
-    const stopsSnapshot = await routeDoc.ref
-      .collection(COLLECTIONS.stops)
-      .orderBy("sequenceNo")
-      .get();
-
-    const stops: Stop[] = stopsSnapshot.docs.map((doc) => ({
-      stopId: doc.id,
-      routeId: route.routeId,
-      ...(doc.data() as Omit<Stop, "stopId" | "routeId">),
-    }));
-
-    const activeTripSnapshot = await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
-      .collection(COLLECTIONS.trips)
-      .where("busId", "==", driver.assignedBusId)
-      .where("tripStatus", "==", "active")
-      .limit(1)
-      .get();
-
-    const tripId = activeTripSnapshot.empty
-      ? null
-      : activeTripSnapshot.docs[0].id;
-
-    ok(res, { driver, bus, route, stops, tripId });
+    const { sendDriverPhoneOtp } = await import("../services/driverOtp");
+    await sendDriverPhoneOtp(orgId, phone);
+    ok(res, { sent: true });
   } catch (error) {
-    fail(res, (error as Error).message, 500);
+    const message = (error as Error).message || "";
+    if (/محاولات كثيرة/.test(message)) {
+      fail(res, message, 429);
+      return;
+    }
+    if (/اكتب رقم الجوال/.test(message)) {
+      fail(res, message, 400);
+      return;
+    }
+    ok(res, { sent: true });
+  }
+});
+
+router.post("/driver-verify-otp", async (req, res) => {
+  try {
+    const orgId = getOrgId(req);
+    const { phone, code } = req.body as { phone?: string; code?: string };
+
+    if (!phone?.trim() || !code?.trim()) {
+      fail(res, "أدخل رقم الجوال ورمز التحقق.");
+      return;
+    }
+
+    const { verifyDriverPhoneOtp } = await import("../services/driverOtp");
+    const session = await verifyDriverPhoneOtp(orgId, phone, code);
+    ok(res, session);
+  } catch (error) {
+    failAuth(res, error);
+  }
+});
+
+router.post("/driver-login", async (req, res) => {
+  try {
+    if (!loginRateAllowed(res, "driver-login", clientRateKey(req))) return;
+    const { idToken } = req.body as { idToken?: string };
+    const decision = driverLoginDecision(idToken);
+    if (!decision.ok) {
+      fail(res, DRIVER_LOGIN_DENIED, 401);
+      return;
+    }
+
+    const { createFirebaseAppSession } = await import(
+      "../services/firebaseAppSession"
+    );
+    const session = await createFirebaseAppSession(decision.idToken, "driver");
+    ok(res, session);
+  } catch (error) {
+    failAuth(res, error);
   }
 });
 
@@ -283,13 +278,14 @@ router.post("/firebase-app-session", async (req, res) => {
       fail(res, "Invalid request.");
       return;
     }
+    if (!loginRateAllowed(res, "firebase-app-session", clientRateKey(req))) return;
     const { createFirebaseAppSession } = await import(
       "../services/firebaseAppSession"
     );
     const session = await createFirebaseAppSession(idToken, app);
     ok(res, session);
   } catch (error) {
-    fail(res, (error as Error).message, 401);
+    failAuth(res, error);
   }
 });
 

@@ -2,17 +2,23 @@ import { Router } from "express";
 import { COLLECTIONS, isWithinGeofence } from "@tardadi/shared";
 import type { GeoPoint } from "@tardadi/shared";
 import { db } from "../firebase";
-import { fail, getOrgId, ok } from "../utils";
+import { HttpError } from "../auth/middleware";
+import { tripMatchesActor } from "../auth/driverAccess";
+import { requireTripWriter, resolveTripActor } from "../auth/tripAuth";
+import { businessRef } from "../business/helpers";
+import { fail, ok } from "../utils";
 import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
 
 router.use(rejectStoreReviewAccess);
 
-router.post("/", async (req, res) => {
+router.post("/", requireTripWriter, async (req, res) => {
   try {
-    const orgId = getOrgId(req);
-    const { tripId, driverId, busId, latitude, longitude, speedKmh, heading, crowdLevel, onBreak } =
+    const actor = resolveTripActor(req);
+    const orgId = actor.businessId;
+    const driverId = actor.driverId;
+    const { tripId, busId, latitude, longitude, speedKmh, heading, crowdLevel, onBreak } =
       req.body;
 
     if (
@@ -26,9 +32,7 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    const tripRef = db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
+    const tripRef = businessRef(db, orgId)
       .collection(COLLECTIONS.trips)
       .doc(tripId);
 
@@ -44,14 +48,12 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    if (trip.driverId !== driverId || trip.busId !== busId) {
+    if (!tripMatchesActor(trip, driverId, busId)) {
       fail(res, "Trip does not match driver or bus", 403);
       return;
     }
 
-    const stopsSnapshot = await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
+    const stopsSnapshot = await businessRef(db, orgId)
       .collection(COLLECTIONS.routes)
       .doc(trip.routeId)
       .collection(COLLECTIONS.stops)
@@ -97,9 +99,7 @@ router.post("/", async (req, res) => {
       tripUpdate.breakHistory = breakHistory;
     }
 
-    await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
+    await businessRef(db, orgId)
       .collection(COLLECTIONS.buses)
       .doc(busId)
       .update({
@@ -120,7 +120,8 @@ router.post("/", async (req, res) => {
       withinGeofence,
     }, 201);
   } catch (error) {
-    fail(res, (error as Error).message, 500);
+    const err = error as HttpError;
+    fail(res, err.message, err.status ?? 500);
   }
 });
 

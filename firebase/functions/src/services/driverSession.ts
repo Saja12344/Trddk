@@ -1,6 +1,7 @@
 import { COLLECTIONS } from "@tardadi/shared";
 import type { Bus, Driver, Route, Stop } from "@tardadi/shared";
 import { db } from "../firebase";
+import { signDriverSessionToken } from "../auth/driverAccess";
 import { withBusinessId } from "../auth/scope";
 import { businessRef } from "../business/helpers";
 
@@ -10,6 +11,7 @@ export interface DriverSessionPayload {
   route: Route;
   stops: Stop[];
   tripId: string | null;
+  sessionToken: string;
 }
 
 export async function loadDriverSessionFromBusiness(
@@ -94,29 +96,85 @@ export async function loadDriverSessionFromBusiness(
     ? null
     : activeTripSnapshot.docs[0].id;
 
-  return { driver, bus, route, stops, tripId };
+  return {
+    driver,
+    bus,
+    route,
+    stops,
+    tripId,
+    sessionToken: signDriverSessionToken(
+      driver.driverId,
+      businessId,
+      driver.name
+    ),
+  };
 }
 
-/** @deprecated Phone login — prefer Firebase email session. */
+function phoneCandidates(
+  phone: string,
+  normalizePhone: (value: string) => string
+): string[] {
+  const trimmed = phone.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  const values = new Set<string>([trimmed, normalizePhone(trimmed)]);
+  if (digits) values.add(digits);
+  if (digits.startsWith("966")) values.add(`+${digits}`);
+  if (digits.startsWith("05") && digits.length === 10) {
+    values.add(`+966${digits.slice(1)}`);
+  }
+  if (digits.startsWith("5") && digits.length === 9) {
+    values.add(`+966${digits}`);
+  }
+  return [...values].filter(Boolean);
+}
+
+async function findActiveDriverByPhone(
+  phone: string,
+  normalizePhone: (phone: string) => string,
+  preferredBusinessId?: string
+): Promise<{ businessId: string; driverId: string }> {
+  const candidates = phoneCandidates(phone, normalizePhone);
+
+  const lookupInBusiness = async (businessId: string) => {
+    const col = businessRef(db, businessId).collection(COLLECTIONS.drivers);
+    for (const candidate of candidates) {
+      const snapshot = await col.where("phone", "==", candidate).limit(5).get();
+      const match = snapshot.docs.find((doc) => {
+        const status = doc.data().status as string | undefined;
+        return !status || status === "active";
+      });
+      if (match) return { businessId, driverId: match.id };
+    }
+    return null;
+  };
+
+  const preferred =
+    preferredBusinessId && preferredBusinessId !== "demo-org"
+      ? preferredBusinessId
+      : undefined;
+  if (preferred) {
+    const found = await lookupInBusiness(preferred);
+    if (found) return found;
+  }
+
+  const businesses = await db.collection(COLLECTIONS.businesses).get();
+  for (const biz of businesses.docs) {
+    if (biz.id === preferred) continue;
+    const found = await lookupInBusiness(biz.id);
+    if (found) return found;
+  }
+
+  throw new Error("Phone number is not registered. Contact your employer.");
+}
+
+/** Phone login for the driver app — looks up the registered driver by mobile number. */
 export async function loadDriverSessionByPhone(
   orgId: string,
   phone: string,
   normalizePhone: (phone: string) => string
 ): Promise<DriverSessionPayload> {
-  const normalizedPhone = normalizePhone(phone);
-
-  const driversSnapshot = await businessRef(db, orgId)
-    .collection(COLLECTIONS.drivers)
-    .where("phone", "==", normalizedPhone)
-    .where("status", "==", "active")
-    .limit(1)
-    .get();
-
-  if (driversSnapshot.empty) {
-    throw new Error("Phone number is not registered. Contact your employer.");
-  }
-
-  return loadDriverSessionFromBusiness(orgId, driversSnapshot.docs[0].id);
+  const found = await findActiveDriverByPhone(phone, normalizePhone, orgId);
+  return loadDriverSessionFromBusiness(found.businessId, found.driverId);
 }
 
 /** @deprecated Use loadDriverSessionFromBusiness */

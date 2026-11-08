@@ -1,6 +1,7 @@
 .DS_Store
 node_modules/
 dist/
+apps/admin/test/.generated/
 build/
 .expo/
 .next/

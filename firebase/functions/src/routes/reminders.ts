@@ -2,22 +2,24 @@ import { Router } from "express";
 import type { Query } from "firebase-admin/firestore";
 import { COLLECTIONS, DEFAULT_REMINDER_MINUTES } from "@tardadi/shared";
 import { db } from "../firebase";
-import { fail, getOrgId, ok } from "../utils";
+import { HttpError, requirePermission } from "../auth/middleware";
+import { reminderOwner, requestedBusinessId, scopedBusinessId } from "../auth/driverAccess";
+import { requireReminderWriter } from "../auth/tripAuth";
+import { requireBusinessId } from "../auth/scope";
+import { businessRef } from "../business/helpers";
+import { fail, ok, paramId } from "../utils";
 import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
 
 router.use(rejectStoreReviewAccess);
 
-router.get("/", async (req, res) => {
+router.get("/", requirePermission("trips:read"), async (req, res) => {
   try {
-    const orgId = getOrgId(req);
+    const orgId = requireBusinessId(req, req.adminAuth);
     const userId = req.query.userId as string | undefined;
 
-    let query: Query = db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
-      .collection(COLLECTIONS.reminders);
+    let query: Query = businessRef(db, orgId).collection(COLLECTIONS.reminders);
 
     if (userId) {
       query = query.where("userId", "==", userId);
@@ -36,11 +38,26 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireReminderWriter, async (req, res) => {
   try {
-    const orgId = getOrgId(req);
+    const passenger = req.passengerSession;
+    const scoped = passenger
+      ? scopedBusinessId(passenger.businessId, requestedBusinessId(req))
+      : null;
+    if (passenger && scoped && !scoped.ok) {
+      fail(res, "لا يمكنك الوصول لبيانات شركة أخرى.", scoped.status);
+      return;
+    }
+    const orgId = passenger
+      ? passenger.businessId
+      : requireBusinessId(req, req.adminAuth);
+    const owner = passenger ? reminderOwner(passenger.userId, req.body?.userId) : null;
+    if (owner && !owner.ok) {
+      fail(res, "ليس لديك صلاحية لهذا الإجراء.", 403);
+      return;
+    }
+    const userId = owner?.ok ? owner.userId : req.body?.userId;
     const {
-      userId,
       busId,
       routeId,
       stopId,
@@ -54,9 +71,7 @@ router.post("/", async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    const docRef = await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
+    const docRef = await businessRef(db, orgId)
       .collection(COLLECTIONS.reminders)
       .add({
         userId,
@@ -85,28 +100,47 @@ router.post("/", async (req, res) => {
       201
     );
   } catch (error) {
-    fail(res, (error as Error).message, 500);
+    const err = error as HttpError;
+    fail(res, err.message, err.status ?? 500);
   }
 });
 
-router.delete("/:reminderId", async (req, res) => {
+router.delete("/:reminderId", requireReminderWriter, async (req, res) => {
   try {
-    const orgId = getOrgId(req);
-    const { reminderId } = req.params;
-
-    await db
-      .collection(COLLECTIONS.organizations)
-      .doc(orgId)
+    const passenger = req.passengerSession;
+    const scoped = passenger
+      ? scopedBusinessId(passenger.businessId, requestedBusinessId(req))
+      : null;
+    if (passenger && scoped && !scoped.ok) {
+      fail(res, "لا يمكنك الوصول لبيانات شركة أخرى.", scoped.status);
+      return;
+    }
+    const orgId = passenger
+      ? passenger.businessId
+      : requireBusinessId(req, req.adminAuth);
+    const reminderId = paramId(req.params.reminderId);
+    const ref = businessRef(db, orgId)
       .collection(COLLECTIONS.reminders)
-      .doc(reminderId)
-      .update({
-        status: "cancelled",
-        updatedAt: new Date().toISOString(),
-      });
+      .doc(reminderId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      fail(res, "Trip not found", 404);
+      return;
+    }
+    if (passenger && existing.data()?.userId !== passenger.userId) {
+      fail(res, "ليس لديك صلاحية لهذا الإجراء.", 403);
+      return;
+    }
+
+    await ref.update({
+      status: "cancelled",
+      updatedAt: new Date().toISOString(),
+    });
 
     ok(res, { reminderId, status: "cancelled" });
   } catch (error) {
-    fail(res, (error as Error).message, 500);
+    const err = error as HttpError;
+    fail(res, err.message, err.status ?? 500);
   }
 });
 

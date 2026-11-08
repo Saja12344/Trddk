@@ -253,6 +253,7 @@ class DriverSession {
     required this.route,
     required this.stops,
     this.tripId,
+    this.sessionToken,
   });
 
   final DriverModel driver;
@@ -260,6 +261,7 @@ class DriverSession {
   final RouteModel route;
   final List<StopModel> stops;
   final String? tripId;
+  final String? sessionToken;
 
   DriverSession copyWith({String? tripId, bool clearTripId = false}) {
     return DriverSession(
@@ -268,6 +270,7 @@ class DriverSession {
       route: route,
       stops: stops,
       tripId: clearTripId ? null : (tripId ?? this.tripId),
+      sessionToken: sessionToken,
     );
   }
 }

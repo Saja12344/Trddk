@@ -6,8 +6,6 @@ import { getJwtSecret, signJwt, verifyJwt } from "../auth/crypto";
 /** Store-review passenger line. The code is checked only on the server. */
 export const STORE_REVIEW_PHONE = "+966500300001";
 
-const DEFAULT_REVIEW_OTP = "84729163";
-
 export const STORE_REVIEW_ROLE = "passenger_review";
 
 export const STORE_REVIEW_FORBIDDEN =
@@ -29,11 +27,11 @@ export function isStoreReviewPhone(phone: string): boolean {
   return normalizePhone(phone) === STORE_REVIEW_PHONE;
 }
 
-/** Fixed 8-digit code. An invalid env value falls back to the review code. */
-export function expectedReviewOtp(): string {
+/** Eight-digit store-review code from the environment. No code is built into the source. */
+export function expectedReviewOtp(): string | null {
   const fromEnv = process.env.PASSENGER_REVIEW_OTP?.trim();
   if (fromEnv && /^\d{8}$/.test(fromEnv)) return fromEnv;
-  return DEFAULT_REVIEW_OTP;
+  return null;
 }
 
 export function reviewLoginDecision(
@@ -43,6 +41,7 @@ export function reviewLoginDecision(
   if (!isStoreReviewPhone(phone)) return { ok: false };
 
   const expected = expectedReviewOtp();
+  if (!expected) return { ok: false };
   const trimmed = code.trim();
   if (trimmed.length !== expected.length) return { ok: false };
 

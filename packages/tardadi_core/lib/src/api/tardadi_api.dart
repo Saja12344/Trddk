@@ -28,9 +28,12 @@ class TardadiApi {
     String method = 'GET',
     Map<String, dynamic>? body,
     Map<String, String>? query,
+    String? baseUrl,
     required T Function(dynamic data) parser,
   }) async {
-    final uri = _uri(path, query);
+    final uri = baseUrl == null
+        ? _uri(path, query)
+        : Uri.parse('$baseUrl$path');
     final headers = <String, String>{
       if (method == 'POST') 'Content-Type': 'application/json',
       if (_config.authToken != null && _config.authToken!.isNotEmpty)
@@ -98,6 +101,36 @@ class TardadiApi {
       parser: (data) => (data as List)
           .map((e) => BusModel.fromJson(e as Map<String, dynamic>))
           .toList(),
+    );
+  }
+
+  Future<void> driverStartLogin({
+    required String phone,
+  }) {
+    return _request(
+      '/api/auth/driver-start-login',
+      method: 'POST',
+      body: {
+        'organizationId': _config.organizationId,
+        'phone': phone,
+      },
+      parser: (_) {},
+    );
+  }
+
+  Future<DriverSession> driverVerifyOtp({
+    required String phone,
+    required String code,
+  }) {
+    return _request(
+      '/api/auth/driver-verify-otp',
+      method: 'POST',
+      body: {
+        'organizationId': _config.organizationId,
+        'phone': phone,
+        'code': code,
+      },
+      parser: _parseDriverSession,
     );
   }
 
@@ -277,6 +310,7 @@ class TardadiApi {
           .map((e) => StopModel.fromJson(e as Map<String, dynamic>))
           .toList(),
       tripId: map['tripId'] as String?,
+      sessionToken: map['sessionToken'] as String?,
     );
   }
 

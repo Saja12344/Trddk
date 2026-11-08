@@ -12,10 +12,20 @@ import gpsRouter from "./routes/gps";
 import remindersRouter from "./routes/reminders";
 import usersRouter from "./routes/users";
 import { attachAdminAuth } from "./auth/middleware";
+import { getJwtSecret } from "./auth/crypto";
+import { isAllowedApiOrigin } from "./http/corsPolicy";
+
+getJwtSecret();
 
 const app = express();
 
-app.use(cors({ origin: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      callback(null, isAllowedApiOrigin(origin));
+    },
+  })
+);
 app.use(express.json());
 app.use(attachAdminAuth);
 

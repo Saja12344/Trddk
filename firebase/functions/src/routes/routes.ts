@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { COLLECTIONS, totalStationCount } from "@tardadi/shared";
 import { db } from "../firebase";
-import { optionalAdminWithPermission } from "../auth/middleware";
+import { optionalAdminWithPermission, requirePermission } from "../auth/middleware";
+import { ROUTE_WRITE_FIELDS, pickAllowedFields } from "../auth/driverAccess";
 import { resolveBusinessId, requireBusinessId, withBusinessId } from "../auth/scope";
 import {
   listAccessibleBusinessIds,
@@ -285,7 +286,7 @@ router.get("/:routeId", optionalAdminWithPermission("routes:read"), async (req, 
   }
 });
 
-router.post("/", optionalAdminWithPermission("routes:write"), async (req, res) => {
+router.post("/", requirePermission("routes:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const {
@@ -383,14 +384,14 @@ router.post("/", optionalAdminWithPermission("routes:write"), async (req, res) =
   }
 });
 
-router.put("/:routeId", optionalAdminWithPermission("routes:write"), async (req, res) => {
+router.put("/:routeId", requirePermission("routes:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const routeId = paramId(req.params.routeId);
-    const updates = { ...req.body, updatedAt: new Date().toISOString() };
-    delete updates.organizationId;
-    delete updates.businessId;
-    delete updates.routeId;
+    const updates = {
+      ...pickAllowedFields(req.body ?? {}, ROUTE_WRITE_FIELDS),
+      updatedAt: new Date().toISOString(),
+    };
 
     await businessRef(db, businessId)
       .collection(COLLECTIONS.routes)
@@ -404,7 +405,7 @@ router.put("/:routeId", optionalAdminWithPermission("routes:write"), async (req,
   }
 });
 
-router.delete("/:routeId", optionalAdminWithPermission("routes:write"), async (req, res) => {
+router.delete("/:routeId", requirePermission("routes:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const routeId = paramId(req.params.routeId);

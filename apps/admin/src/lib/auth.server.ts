@@ -6,17 +6,15 @@ import {
   type SessionPayload,
 } from "./auth.constants";
 import { getServerApiUrl } from "./env.server";
+import { sessionFromAdminCookie } from "./adminSessionToken";
 
 export async function getSession(): Promise<SessionPayload | null> {
   const jar = await cookies();
   const raw = jar.get(SESSION_COOKIE)?.value;
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as SessionPayload;
-  } catch {
-    return null;
-  }
+  return sessionFromAdminCookie(
+    raw,
+    process.env.ADMIN_JWT_SECRET || process.env.ADMIN_API_TOKEN
+  );
 }
 
 export async function getBusinessContextId(): Promise<string | null> {

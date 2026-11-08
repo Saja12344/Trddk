@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "crypto";
 import { COLLECTIONS, normalizePhone } from "@tardadi/shared";
 import { db } from "../firebase";
+import { driverStartDelivery } from "../auth/driverAccess";
 import { consumeRateLimit } from "../auth/rateLimit";
 import { sendSms } from "../auth/sms";
 import { loadDriverSessionByPhone } from "./driverSession";
@@ -27,16 +28,23 @@ export async function sendDriverPhoneOtp(
     throw new Error("اكتب رقم الجوال.");
   }
 
-  if (isStoreReviewPhone(normalized)) {
-    throw new Error("تعذّر إرسال رمز التحقق إلى الجوال.");
-  }
-
   const rate = consumeRateLimit(`driver-otp:${normalized}`, 8, 15 * 60 * 1000);
   if (!rate.allowed) {
     throw new Error("محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.");
   }
 
-  await loadDriverSessionByPhone(orgId, phone, normalizePhone);
+  let registeredActiveAssigned = false;
+  if (!isStoreReviewPhone(normalized)) {
+    try {
+      await loadDriverSessionByPhone(orgId, phone, normalizePhone);
+      registeredActiveAssigned = true;
+    } catch {
+      registeredActiveAssigned = false;
+    }
+  }
+  if (!driverStartDelivery(registeredActiveAssigned).deliverSms) {
+    return { sent: true };
+  }
 
   const ref = db.collection(COLLECTIONS.driverOtp).doc(otpDocId(normalized));
   const now = Date.now();
@@ -66,9 +74,9 @@ export async function sendDriverPhoneOtp(
       normalized,
       `رمز دخول تطبيق سائق TRDDK هو ${code}. صالح لثماني دقائق.`
     );
-  } catch (error) {
+  } catch {
     await ref.delete();
-    throw error;
+    return { sent: true };
   }
 
   return { sent: true };
@@ -81,6 +89,14 @@ export async function verifyDriverPhoneOtp(
 ) {
   const normalized = normalizePhone(phone);
   const trimmed = code.trim();
+  const verifyRate = consumeRateLimit(
+    `driver-otp-verify:${normalized || "invalid"}`,
+    10,
+    15 * 60 * 1000
+  );
+  if (!verifyRate.allowed) {
+    throw new Error("محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.");
+  }
   if (!/^\d{6}$/.test(trimmed)) {
     throw new Error("أدخل رمز التحقق المكوّن من 6 أرقام.");
   }

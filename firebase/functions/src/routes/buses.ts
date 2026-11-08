@@ -2,7 +2,8 @@ import { Router } from "express";
 import type { Query } from "firebase-admin/firestore";
 import { COLLECTIONS } from "@tardadi/shared";
 import { db } from "../firebase";
-import { optionalAdminWithPermission } from "../auth/middleware";
+import { optionalAdminWithPermission, requirePermission } from "../auth/middleware";
+import { BUS_WRITE_FIELDS, pickAllowedFields } from "../auth/driverAccess";
 import { resolveBusinessId, requireBusinessId, withBusinessId } from "../auth/scope";
 import {
   listAccessibleBusinessIds,
@@ -49,7 +50,7 @@ router.get("/", optionalAdminWithPermission("buses:read"), async (req, res) => {
   }
 });
 
-router.post("/", optionalAdminWithPermission("buses:write"), async (req, res) => {
+router.post("/", requirePermission("buses:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const { plateNo, label, status = "active" } = req.body;
@@ -84,14 +85,14 @@ router.post("/", optionalAdminWithPermission("buses:write"), async (req, res) =>
   }
 });
 
-router.put("/:busId", optionalAdminWithPermission("buses:write"), async (req, res) => {
+router.put("/:busId", requirePermission("buses:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const busId = paramId(req.params.busId);
-    const updates = { ...req.body, updatedAt: new Date().toISOString() };
-    delete updates.organizationId;
-    delete updates.businessId;
-    delete updates.busId;
+    const updates = {
+      ...pickAllowedFields(req.body ?? {}, BUS_WRITE_FIELDS),
+      updatedAt: new Date().toISOString(),
+    };
 
     await businessRef(db, businessId)
       .collection(COLLECTIONS.buses)
@@ -105,7 +106,7 @@ router.put("/:busId", optionalAdminWithPermission("buses:write"), async (req, re
   }
 });
 
-router.delete("/:busId", optionalAdminWithPermission("buses:write"), async (req, res) => {
+router.delete("/:busId", requirePermission("buses:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const busId = paramId(req.params.busId);
