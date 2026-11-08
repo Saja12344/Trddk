@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth.constants";
+import { sessionFromAdminCookie } from "@/lib/adminSessionToken";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -9,7 +10,7 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
 ];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic =
     PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
@@ -44,16 +45,23 @@ export function middleware(request: NextRequest) {
   ].join("; ");
   response.headers.set("Content-Security-Policy", csp);
 
+  const sessionRaw = request.cookies.get(SESSION_COOKIE)?.value;
+  const verified = Boolean(
+    await sessionFromAdminCookie(
+      sessionRaw,
+      process.env.ADMIN_JWT_SECRET || process.env.ADMIN_API_TOKEN
+    )
+  );
+
   if (!isPublic && !pathname.startsWith("/api/auth/")) {
-    const session = request.cookies.get(SESSION_COOKIE)?.value;
-    if (!session) {
+    if (!verified) {
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("next", pathname);
       return NextResponse.redirect(loginUrl);
     }
   }
 
-  if (pathname === "/login" && request.cookies.get(SESSION_COOKIE)?.value) {
+  if (pathname === "/login" && verified) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
