@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBusinessContextId, getSession } from "@/lib/auth.server";
 import {
-  getBusinessContextId,
-  getSession,
-  resolveActiveBusinessId,
-} from "@/lib/auth.server";
+  companyBusinessPathAllowed,
+  isCompanyScopedRole,
+  scopedRequestBusinessId,
+} from "@/lib/adminTenantScope";
 import {
   getServerApiUrl,
   isAllowedProxyPath,
 } from "@/lib/env.server";
+import { adaptLegacyCreateBusinessBody } from "@/lib/businessCreateCompat";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -30,8 +32,27 @@ async function proxyRequest(
     );
   }
 
+  const scope = scopedRequestBusinessId({
+    role: session.user.role,
+    tokenBusinessId: session.user.businessId,
+    contextBusinessId: await getBusinessContextId(),
+  });
+  if (
+    !scope.ok ||
+    !companyBusinessPathAllowed(
+      session.user.role,
+      session.user.businessId,
+      pathSegments
+    )
+  ) {
+    return NextResponse.json(
+      { success: false, error: "ليس لديك صلاحية للوصول لهذا الطلب." },
+      { status: 403 }
+    );
+  }
+
   const apiUrl = getServerApiUrl();
-  const businessId = await resolveActiveBusinessId(session);
+  const businessId = scope.businessId;
   const pathname = pathSegments.join("/");
   const targetUrl = new URL(`${apiUrl}/${pathname}`);
 
@@ -41,7 +62,13 @@ async function proxyRequest(
     }
   });
 
-  if (businessId) {
+  const isCreateBusiness =
+    request.method === "POST" &&
+    pathSegments.length === 2 &&
+    pathSegments[0] === "api" &&
+    pathSegments[1] === "businesses";
+
+  if (businessId && !isCreateBusiness) {
     targetUrl.searchParams.set("businessId", businessId);
     targetUrl.searchParams.set("organizationId", businessId);
   }
@@ -61,14 +88,34 @@ async function proxyRequest(
 
   if (MUTATION_METHODS.has(request.method)) {
     let bodyText = await request.text();
-    if (bodyText && businessId) {
+    if (bodyText) {
       try {
         const parsed = JSON.parse(bodyText) as Record<string, unknown>;
-        parsed.businessId = businessId;
-        parsed.organizationId = businessId;
+        if (isCreateBusiness) {
+          const adapted = adaptLegacyCreateBusinessBody(parsed);
+          if (!adapted.ok) {
+            return NextResponse.json(
+              { success: false, error: adapted.error },
+              { status: 400 }
+            );
+          }
+          Object.assign(parsed, adapted.body);
+        }
+        if (isCompanyScopedRole(session.user.role)) {
+          parsed.businessId = session.user.businessId;
+          parsed.organizationId = session.user.businessId;
+        } else if (businessId && !isCreateBusiness && parsed.businessId == null) {
+          parsed.businessId = businessId;
+          parsed.organizationId = businessId;
+        }
         bodyText = JSON.stringify(parsed);
       } catch {
-        // keep original body
+        if (isCompanyScopedRole(session.user.role)) {
+          return NextResponse.json(
+            { success: false, error: "الطلب غير صحيح." },
+            { status: 400 }
+          );
+        }
       }
     }
     init.body = bodyText;
@@ -88,6 +135,7 @@ async function proxyRequest(
   }
 
   const body = await upstream.text();
+
   return new NextResponse(body, {
     status: upstream.status,
     headers: {

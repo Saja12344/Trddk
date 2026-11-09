@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -10,6 +10,18 @@ import {
 import TrddkWordmark from "@/components/TrddkWordmark";
 
 type Step = "password" | "otp";
+
+const MFA_KEY = "trddk_admin_mfa";
+
+function safeAdminNext(next: string | null, fallback: string) {
+  if (!next || next === "/" || next === "/en" || next.startsWith("/en/")) {
+    return fallback;
+  }
+  if (next.startsWith("/login") || next.startsWith("/forgot-password")) {
+    return fallback;
+  }
+  return next;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,6 +35,25 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(MFA_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        challengeToken?: string;
+        maskedEmail?: string;
+        email?: string;
+      };
+      if (!saved.challengeToken) return;
+      setChallengeToken(saved.challengeToken);
+      setMaskedEmail(saved.maskedEmail || "");
+      if (saved.email) setEmail(saved.email);
+      setStep("otp");
+    } catch {
+      // ignore
+    }
+  }, []);
+
   async function handlePasswordStep(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -35,12 +66,26 @@ export default function LoginPage() {
         body: JSON.stringify({ idToken }),
       });
       const body = await res.json();
-      if (!res.ok || !body.success) {
+      if (!res.ok || !body.success || !body.data?.challengeToken) {
         throw new Error(body.error || "فشل تسجيل الدخول");
       }
-      setChallengeToken(body.data.challengeToken as string);
-      setMaskedEmail(body.data.email as string);
+      const nextToken = body.data.challengeToken as string;
+      const nextEmail = body.data.email as string;
+      setChallengeToken(nextToken);
+      setMaskedEmail(nextEmail);
       setStep("otp");
+      try {
+        sessionStorage.setItem(
+          MFA_KEY,
+          JSON.stringify({
+            challengeToken: nextToken,
+            maskedEmail: nextEmail,
+            email,
+          })
+        );
+      } catch {
+        // ignore
+      }
     } catch (err) {
       setError(mapFirebaseAuthError(err));
     } finally {
@@ -61,6 +106,11 @@ export default function LoginPage() {
       const body = await res.json();
       if (!res.ok || !body.success) {
         throw new Error(body.error || "رمز التحقق غير صحيح");
+      }
+      try {
+        sessionStorage.removeItem(MFA_KEY);
+      } catch {
+        // ignore
       }
       redirectAfterLogin(body.data.user);
     } catch (err) {
@@ -96,9 +146,11 @@ export default function LoginPage() {
       (user.role === "business_admin" || user.role === "business_viewer") &&
       user.businessId
     ) {
-      router.replace(next || `/businesses/${user.businessId}`);
+      router.replace(
+        safeAdminNext(next, `/businesses/${user.businessId}`)
+      );
     } else {
-      router.replace(next || "/");
+      router.replace(safeAdminNext(next, "/dashboard"));
     }
     router.refresh();
   }
@@ -154,6 +206,9 @@ export default function LoginPage() {
             <Link href="/forgot-password" className="btn btn-ghost">
               نسيت كلمة المرور؟
             </Link>
+            <Link href="/" className="btn btn-ghost">
+              العودة إلى الموقع
+            </Link>
           </form>
         ) : (
           <form className="login-form" onSubmit={handleOtpStep}>
@@ -191,6 +246,11 @@ export default function LoginPage() {
               type="button"
               className="btn btn-ghost"
               onClick={() => {
+                try {
+                  sessionStorage.removeItem(MFA_KEY);
+                } catch {
+                  // ignore
+                }
                 setStep("password");
                 setOtp("");
                 setChallengeToken("");

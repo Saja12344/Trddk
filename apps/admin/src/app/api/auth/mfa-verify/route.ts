@@ -3,6 +3,8 @@ import {
   BUSINESS_CONTEXT_COOKIE,
   SESSION_COOKIE,
 } from "@/lib/auth.constants";
+import { getAdminJwtSecret } from "@/lib/auth.server";
+import { verifyAdminSessionToken } from "@/lib/adminSessionToken";
 import { fetchBackend } from "@/lib/backend.server";
 
 const ONE_WEEK = 60 * 60 * 24 * 7;
@@ -56,14 +58,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { sessionToken, user } = payload.data;
+  const claims = await verifyAdminSessionToken(
+    payload.data.sessionToken,
+    getAdminJwtSecret()
+  );
+  if (!claims) {
+    return NextResponse.json(
+      { success: false, error: "Invalid code." },
+      { status: 401 }
+    );
+  }
+
   const sessionUser = {
-    userId: user.userId,
-    name: user.name,
-    phone: user.email,
-    email: user.email,
-    role: user.role,
-    businessId: user.businessId,
+    userId: claims.sub,
+    name: claims.name,
+    phone: claims.phone,
+    email: claims.phone,
+    role: claims.role,
+    businessId: claims.businessId,
     mfaCompleted: true,
   };
 
@@ -75,7 +87,7 @@ export async function POST(request: NextRequest) {
   response.cookies.set(
     SESSION_COOKIE,
     JSON.stringify({
-      token: sessionToken,
+      token: payload.data.sessionToken,
       user: sessionUser,
       authSource: "admin_mfa",
     }),
@@ -89,10 +101,10 @@ export async function POST(request: NextRequest) {
   );
 
   if (
-    (user.role === "business_admin" || user.role === "business_viewer") &&
-    user.businessId
+    (claims.role === "business_admin" || claims.role === "business_viewer") &&
+    claims.businessId
   ) {
-    response.cookies.set(BUSINESS_CONTEXT_COOKIE, user.businessId, {
+    response.cookies.set(BUSINESS_CONTEXT_COOKIE, claims.businessId, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

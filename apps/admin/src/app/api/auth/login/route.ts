@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { AdminLoginResponse } from "@tardadi/shared";
 import {
   BUSINESS_CONTEXT_COOKIE,
   SESSION_COOKIE,
 } from "@/lib/auth.constants";
+import { getAdminJwtSecret } from "@/lib/auth.server";
+import { verifyAdminSessionToken } from "@/lib/adminSessionToken";
 import { getServerApiUrl } from "@/lib/env.server";
 
 const ONE_WEEK = 60 * 60 * 24 * 7;
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   const payload = (await upstream.json()) as {
     success: boolean;
-    data?: { token: string; user: AdminLoginResponse["user"] };
+    data?: { token: string; user?: unknown };
     error?: string;
   };
 
@@ -53,7 +54,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { token, user } = payload.data;
+  const claims = await verifyAdminSessionToken(
+    payload.data.token,
+    getAdminJwtSecret()
+  );
+  if (!claims) {
+    return NextResponse.json(
+      { success: false, error: "رقم الجوال أو كلمة المرور غير صحيحة." },
+      { status: 401 }
+    );
+  }
+
+  const user = {
+    userId: claims.sub,
+    name: claims.name,
+    phone: claims.phone,
+    role: claims.role,
+    businessId: claims.businessId,
+  };
 
   const response = NextResponse.json({
     success: true,
@@ -62,7 +80,7 @@ export async function POST(request: NextRequest) {
 
   response.cookies.set(
     SESSION_COOKIE,
-    JSON.stringify({ token, user }),
+    JSON.stringify({ token: payload.data.token, user }),
     {
       httpOnly: true,
       sameSite: "lax",

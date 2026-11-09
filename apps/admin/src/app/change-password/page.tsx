@@ -30,7 +30,7 @@ export default function ChangePasswordPage() {
     setLoading(true);
     try {
       await firebaseChangePassword(currentPassword, newPassword);
-      router.replace("/");
+      router.replace("/dashboard");
       router.refresh();
     } catch (err) {
       setError(mapFirebaseAuthError(err) || getUserErrorMessage(err));

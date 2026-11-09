@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --pretty false --module nodenext --moduleResolution nodenext --target es2022 --skipLibCheck --rootDir src/lib --outDir test/.generated src/lib/adminSessionToken.ts && node --test test/admin-session.test.mjs"
+    "test": "tsc --pretty false --module nodenext --moduleResolution nodenext --target es2022 --skipLibCheck --rootDir src/lib --outDir test/.generated src/lib/adminSessionToken.ts src/lib/adminTenantScope.ts && node --test test/admin-session.test.mjs"
   },
   "dependencies": {
     "@tardadi/shared": "*",

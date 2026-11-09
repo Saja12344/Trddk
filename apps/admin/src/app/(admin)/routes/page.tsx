@@ -119,6 +119,26 @@ export default function RoutesPage() {
     setPanelMode("create");
   }
 
+  async function deleteRoute(routeId: string, routeName?: string) {
+    if (!confirm(`حذف الخط${routeName ? ` «${routeName}»` : ""}؟ لا يمكن التراجع.`)) {
+      return;
+    }
+    setError("");
+    try {
+      await adminFetch(`/api/routes/${routeId}`, { method: "DELETE" });
+      if (selectedRouteId === routeId) {
+        setSelectedRouteId(null);
+        setSelectedRoute(null);
+        setStops([]);
+        setPanelMode("list");
+      }
+      setSuccess("تم حذف الخط");
+      await load();
+    } catch (e) {
+      setError(getUserErrorMessage(e));
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -237,26 +257,37 @@ export default function RoutesPage() {
     const businessName = businessMap[route.businessId];
 
     return (
-      <button
+      <div
         key={route.routeId}
-        type="button"
         className={`route-list-item ${selectedRouteId === route.routeId ? "active" : ""}`}
-        onClick={() => loadRouteDetail(route.routeId)}
       >
-        <div className="route-list-top">
-          <strong>{route.name}</strong>
-          <span className="route-list-code">{route.code}</span>
-        </div>
-        {showBusiness && businessName && (
-          <BusinessBadge name={businessName} />
-        )}
-        {route.fromLocation && route.toLocation && (
-          <span className="route-list-path">
-            {route.fromLocation.address.split(",")[0]} →{" "}
-            {route.toLocation.address.split(",")[0]}
-          </span>
-        )}
-      </button>
+        <button
+          type="button"
+          className="route-list-main"
+          onClick={() => loadRouteDetail(route.routeId)}
+        >
+          <div className="route-list-top">
+            <strong>{route.name}</strong>
+            <span className="route-list-code">{route.code}</span>
+          </div>
+          {showBusiness && businessName && (
+            <BusinessBadge name={businessName} />
+          )}
+          {route.fromLocation && route.toLocation && (
+            <span className="route-list-path">
+              {route.fromLocation.address.split(",")[0]} →{" "}
+              {route.toLocation.address.split(",")[0]}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className="action-btn action-btn-danger"
+          onClick={() => void deleteRoute(route.routeId, route.name)}
+        >
+          حذف
+        </button>
+      </div>
     );
   }
   const publicRoutes = useMemo(
@@ -512,6 +543,15 @@ export default function RoutesPage() {
                 محطة (بداية + {stops.length} وسيطة + نهاية)
               </p>
             )}
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() =>
+                void deleteRoute(selectedRoute.routeId, selectedRoute.name)
+              }
+            >
+              حذف الخط
+            </button>
           </div>
         )}
       </div>

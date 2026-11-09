@@ -36,6 +36,7 @@ export interface Organization {
 export interface BusinessListItem extends Business {
     adminName?: string | null;
     adminPhone?: string | null;
+    adminEmail?: string | null;
     driverCount: number;
     busCount: number;
     routeCount: number;
@@ -79,8 +80,8 @@ export interface CreateBusinessRequest {
     logo?: string | null;
     status?: EntityStatus;
     adminName: string;
-    adminPhone: string;
-    adminPassword: string;
+    adminEmail: string;
+    adminPhone?: string | null;
 }
 export type ManagerInvitationStatus = "invitation_pending" | "email_verified" | "active" | "suspended" | "incomplete" | "invitation_failed";
 export interface CompanyManagerSummary {
@@ -101,8 +102,8 @@ export interface UpdateBusinessRequest {
     logo?: string | null;
     status?: EntityStatus;
     adminName?: string;
+    adminEmail?: string;
     adminPhone?: string;
-    adminPassword?: string;
 }
 export interface Driver {
     driverId: string;

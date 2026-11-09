@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  BUSINESS_CONTEXT_COOKIE,
-  SESSION_COOKIE,
-} from "@/lib/auth.constants";
 import { fetchBackend } from "@/lib/backend.server";
-
-const ONE_WEEK = 60 * 60 * 24 * 7;
+import { lookupFirebaseIdToken } from "@/lib/firebaseIdentity.server";
+import { linkManagerEmailToBusinesses } from "@/lib/firestoreAdmin.server";
 
 export async function POST(request: NextRequest) {
   const { idToken } = (await request.json()) as { idToken?: string };
@@ -14,6 +10,18 @@ export async function POST(request: NextRequest) {
       { success: false, error: "Invalid credentials." },
       { status: 400 }
     );
+  }
+
+  try {
+    const identity = await lookupFirebaseIdToken(idToken);
+    if (identity?.uid && identity.email) {
+      await linkManagerEmailToBusinesses({
+        uid: identity.uid,
+        email: identity.email,
+      });
+    }
+  } catch {
+    // Continue to MFA; linking is best-effort so the code can still send.
   }
 
   let upstream: Response;
@@ -30,18 +38,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const payload = (await upstream.json()) as {
-    success: boolean;
+  const payload = (await upstream.json().catch(() => ({}))) as {
+    success?: boolean;
     data?: { challengeToken: string; email: string };
     error?: string;
   };
 
-  if (!upstream.ok || !payload.success || !payload.data?.challengeToken) {
-    return NextResponse.json(
-      { success: false, error: payload.error || "Invalid credentials." },
-      { status: upstream.status || 401 }
-    );
+  if (upstream.ok && payload.success && payload.data?.challengeToken) {
+    return NextResponse.json({ success: true, data: payload.data });
   }
 
-  return NextResponse.json({ success: true, data: payload.data });
+  const raw = payload.error || "Invalid credentials.";
+  const error = /admin account not provisioned/i.test(raw)
+    ? "الحساب غير مربوط بشركة في لوحة الإدارة. اطلب من مدير النظام حفظ البريد وإرسال الدعوة مرة واحدة من صفحة الشركة."
+    : /invalid credentials/i.test(raw)
+      ? "تم التحقق من البريد، لكن الحساب غير مكتمل. اطلب من مدير النظام إرسال دعوة مدير الشركة ثم عيّن كلمة المرور من الإيميل."
+      : raw;
+  return NextResponse.json(
+    { success: false, error },
+    { status: upstream.status || 401 }
+  );
 }

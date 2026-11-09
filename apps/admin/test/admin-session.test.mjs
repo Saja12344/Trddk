@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { sessionFromAdminCookie, usableAdminJwtSecret } from "./.generated/adminSessionToken.js";
+import { sessionFromAdminCookie, usableAdminJwtSecret, verifyAdminSessionToken } from "./.generated/adminSessionToken.js";
+import {
+  companyBusinessPathAllowed,
+  scopedRequestBusinessId,
+} from "./.generated/adminTenantScope.js";
 
 const SECRET = "unit-test-jwt-secret-32chars-minimum!";
 
@@ -66,4 +70,99 @@ test("driver and expired tokens do not open the admin session", async () => {
   assert.equal(await sessionFromAdminCookie(cookie(expired, {}), SECRET), null);
   const otherSecret = sign(adminPayload, "another-unit-test-secret-32chars!!");
   assert.equal(await sessionFromAdminCookie(cookie(otherSecret, {}), SECRET), null);
+});
+
+test("a correctly signed MFA session is accepted", async () => {
+  const claims = await verifyAdminSessionToken(sign(adminPayload), SECRET);
+  assert.equal(claims.sub, "admin-1");
+  assert.equal(claims.role, "business_admin");
+  assert.equal(claims.mfa, "1");
+  assert.equal(claims.businessId, "biz-1");
+});
+
+test("a signed payload is rejected after it is modified", async () => {
+  const [header, , signature] = sign(adminPayload).split(".");
+  const tampered = Buffer.from(
+    JSON.stringify({ ...adminPayload, role: "super_admin", businessId: "other-biz" })
+  ).toString("base64url");
+  assert.equal(
+    await verifyAdminSessionToken(`${header}.${tampered}.${signature}`, SECRET),
+    null
+  );
+});
+
+test("an unsigned token is rejected", async () => {
+  const [header, body] = sign(adminPayload).split(".");
+  assert.equal(await verifyAdminSessionToken(`${header}.${body}`, SECRET), null);
+  assert.equal(await verifyAdminSessionToken(`${header}.${body}.`, SECRET), null);
+  assert.equal(
+    await verifyAdminSessionToken(`${header}.${body}.not-a-signature`, SECRET),
+    null
+  );
+});
+
+test("an expired token is rejected", async () => {
+  const expired = sign({ ...adminPayload, exp: Math.floor(Date.now() / 1000) - 10 });
+  assert.equal(await verifyAdminSessionToken(expired, SECRET), null);
+});
+
+test("a token signed with a different secret is rejected", async () => {
+  const token = sign(adminPayload, "another-unit-test-secret-32chars!!");
+  assert.equal(await verifyAdminSessionToken(token, SECRET), null);
+});
+
+test("a driver session token is rejected", async () => {
+  const driver = sign({ ...adminPayload, role: "driver_session", mfa: "1" });
+  assert.equal(await verifyAdminSessionToken(driver, SECRET), null);
+});
+
+test("a passenger or other disallowed role is rejected", async () => {
+  const passenger = sign({ ...adminPayload, role: "passenger_session" });
+  const employee = sign({ ...adminPayload, role: "employee" });
+  assert.equal(await verifyAdminSessionToken(passenger, SECRET), null);
+  assert.equal(await verifyAdminSessionToken(employee, SECRET), null);
+});
+
+test("MFA is required on the admin session token", async () => {
+  const missing = sign({ ...adminPayload, mfa: undefined });
+  const wrong = sign({ ...adminPayload, mfa: "0" });
+  const challenge = sign({ ...adminPayload, role: "admin_mfa_challenge", mfa: "1" });
+  assert.equal(await verifyAdminSessionToken(missing, SECRET), null);
+  assert.equal(await verifyAdminSessionToken(wrong, SECRET), null);
+  assert.equal(await verifyAdminSessionToken(challenge, SECRET), null);
+});
+
+test("company roles cannot choose another business from the client", () => {
+  assert.deepEqual(
+    scopedRequestBusinessId({
+      role: "business_viewer",
+      tokenBusinessId: "biz-1",
+      contextBusinessId: "other-biz",
+    }),
+    { ok: true, businessId: "biz-1" }
+  );
+  assert.deepEqual(
+    scopedRequestBusinessId({
+      role: "business_admin",
+      tokenBusinessId: null,
+      contextBusinessId: "other-biz",
+    }),
+    { ok: false }
+  );
+  assert.equal(
+    companyBusinessPathAllowed("business_admin", "biz-1", ["api", "businesses", "other-biz"]),
+    false
+  );
+  assert.equal(
+    companyBusinessPathAllowed("business_viewer", "biz-1", ["api", "businesses"]),
+    false
+  );
+  assert.equal(
+    companyBusinessPathAllowed("business_admin", "biz-1", ["api", "businesses", "biz-1", "employees"]),
+    true
+  );
+  assert.equal(
+    companyBusinessPathAllowed("super_admin", null, ["api", "businesses"]),
+    true
+  );
 });

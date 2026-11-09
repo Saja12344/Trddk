@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap");
-
 :root {
   --orange: #eb4f26;
   --navy: #1a2744;
@@ -17,7 +15,7 @@
 
 body {
   margin: 0;
-  font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  font-family: var(--font-plex-ar), var(--font-plex), "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
   background: var(--navy);
   color: var(--white);
 }
@@ -104,6 +102,27 @@ a {
 
 .nav-item.active {
   box-shadow: inset 3px 0 0 var(--orange);
+}
+
+[dir="rtl"] .nav-item.active {
+  box-shadow: inset -3px 0 0 var(--orange);
+}
+
+.trddk-wordmark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.trddk-wordmark-image {
+  height: 36px;
+  width: auto;
+}
+
+.trddk-wordmark-icon {
+  height: 40px;
+  width: auto;
 }
 
 .sidebar-footer {
@@ -371,18 +390,143 @@ tbody tr:hover {
   color: var(--white);
 }
 
+.mobile-topbar,
+.sidebar-backdrop {
+  display: none;
+}
+
+.menu-toggle {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.menu-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: #fff;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.admin-layout.menu-open .menu-toggle span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.admin-layout.menu-open .menu-toggle span:nth-child(2) {
+  opacity: 0;
+}
+
+.admin-layout.menu-open .menu-toggle span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
 @media (max-width: 960px) {
   .admin-layout {
     grid-template-columns: 1fr;
   }
 
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 70;
+    height: 60px;
+    padding: 8px 14px;
+    background: #121c31;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .topbar-wordmark .trddk-wordmark-image {
+    height: 22px;
+  }
+
+  .topbar-wordmark .trddk-wordmark-icon {
+    height: 24px;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    border: 0;
+    padding: 0;
+    background: rgba(6, 10, 22, 0.55);
+  }
+
   .sidebar {
+    position: fixed;
+    z-index: 65;
+    top: 60px;
+    bottom: 0;
+    inset-inline-start: 0;
+    width: min(300px, 86vw);
     height: auto;
-    position: static;
+    overflow: auto;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+  }
+
+  [dir="rtl"] .sidebar {
+    transform: translateX(105%);
+  }
+
+  .admin-layout.menu-open .sidebar {
+    transform: none;
+  }
+
+  .main-content {
+    padding: 16px;
+  }
+
+  .page-header {
+    margin-bottom: 16px;
+  }
+
+  .page-header h1 {
+    font-size: 22px;
+    line-height: 1.35;
+  }
+
+  .page-header p {
+    font-size: 14px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .stat-card,
+  .card {
+    padding: 14px 12px;
+  }
+
+  .stat-card strong {
+    font-size: 22px;
+  }
+
+  .stat-card span,
+  .card h3 {
+    font-size: 13px;
   }
 
   .grid-2,
-  .stat-grid {
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -785,19 +929,51 @@ tbody tr:hover {
 
 .route-list-item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 14px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: #1a2744;
   color: var(--white);
   font: inherit;
   text-align: right;
-  cursor: pointer;
   transition: 0.15s ease;
   width: 100%;
+}
+
+.route-list-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.inline-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-edit input {
+  min-width: 0;
+  flex: 1;
+}
+
+.btn-danger {
+  background: #7f1d1d;
+  color: #fff;
+  border: 0;
 }
 
 .route-list-item:hover,

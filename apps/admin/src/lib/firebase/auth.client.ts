@@ -1,12 +1,15 @@
 "use client";
 
 import {
+  applyActionCode,
+  confirmPasswordReset,
   EmailAuthProvider,
   getAuth,
   reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   updatePassword,
+  verifyPasswordResetCode,
   type ActionCodeSettings,
   type Auth,
   type User,
@@ -31,7 +34,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 export function getPasswordResetActionSettings(): ActionCodeSettings {
   const continueUrl =
     process.env.NEXT_PUBLIC_PASSWORD_RESET_CONTINUE_URL?.trim() ||
-    "https://www.tardadi.com/login";
+    "https://www.tardadi.com/reset-password";
 
   return {
     url: continueUrl,
@@ -57,8 +60,35 @@ export async function firebaseSignIn(
     email.trim(),
     password
   );
-  const idToken = await credential.user.getIdToken();
+  const idToken = await credential.user.getIdToken(true);
   return { user: credential.user, idToken };
+}
+
+export async function firebaseVerifyResetCode(oobCode: string): Promise<string> {
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) {
+    throw new Error("Firebase غير مهيأ.");
+  }
+  return verifyPasswordResetCode(firebaseAuth, oobCode);
+}
+
+export async function firebaseConfirmPasswordReset(
+  oobCode: string,
+  newPassword: string
+): Promise<void> {
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) {
+    throw new Error("Firebase غير مهيأ.");
+  }
+  await confirmPasswordReset(firebaseAuth, oobCode, newPassword);
+}
+
+export async function firebaseApplyActionCode(oobCode: string): Promise<void> {
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) {
+    throw new Error("Firebase غير مهيأ.");
+  }
+  await applyActionCode(firebaseAuth, oobCode);
 }
 
 export async function firebaseSendPasswordReset(email: string): Promise<void> {
@@ -111,6 +141,13 @@ export async function firebaseChangePassword(
 
 export function mapFirebaseAuthError(err: unknown): string {
   const code = (err as { code?: string }).code;
+  const message = (err as Error).message || "";
+  if (/admin account not provisioned/i.test(message)) {
+    return "الحساب غير مربوط بشركة. اطلب من مدير النظام حفظ البريد وإرسال الدعوة مرة واحدة من صفحة الشركة.";
+  }
+  if (/invalid credentials/i.test(message)) {
+    return "تعذّر إكمال تسجيل الدخول. إن كانت شركة جديدة فاطلب من مدير النظام إرسال الدعوة مرة واحدة ثم عيّن كلمة المرور من الإيميل.";
+  }
   switch (code) {
     case "auth/invalid-email":
       return "البريد الإلكتروني غير صالح.";
@@ -119,12 +156,16 @@ export function mapFirebaseAuthError(err: unknown): string {
     case "auth/user-not-found":
     case "auth/wrong-password":
     case "auth/invalid-credential":
-      return "البريد أو كلمة المرور غير صحيحة.";
+      return "البريد أو كلمة المرور غير صحيحة. إن كانت شركة جديدة فعيّن كلمة المرور من إيميل التفعيل أولاً.";
     case "auth/too-many-requests":
       return "محاولات كثيرة. انتظر قليلاً ثم حاول مجدداً.";
     case "auth/network-request-failed":
       return "تعذّر الاتصال. تحقق من الشبكة.";
+    case "auth/expired-action-code":
+      return "انتهت صلاحية الرابط. اطلب دعوة جديدة من لوحة الشركة.";
+    case "auth/invalid-action-code":
+      return "الرابط غير صالح أو استُخدم من قبل. اطلب دعوة جديدة.";
     default:
-      return (err as Error).message || "حدث خطأ غير متوقع.";
+      return message || "حدث خطأ غير متوقع.";
   }
 }

@@ -3,3 +3,9 @@
 ../../packages/tardadi_core
 ../../firebase
 ../../scripts
+!public/**
+!public/marketing/**
+!public/marketing/**/*.jpg
+!public/marketing/**/*.webp
+!public/marketing/**/*.png
+!public/marketing/**/*.mp4

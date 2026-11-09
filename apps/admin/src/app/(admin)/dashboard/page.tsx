@@ -9,7 +9,7 @@ import { isSuperAdmin } from "@/lib/auth.constants";
 import { adminFetch } from "@/lib/adminFetch";
 import type { BusinessListItem } from "@tardadi/shared";
 
-export default function HomePage() {
+export default function DashboardPage() {
   const { user, businessContextId } = useAuth();
   const [counts, setCounts] = useState({
     routes: 0,

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import BusinessSwitcher from "./BusinessSwitcher";
 import { isSuperAdmin } from "@/lib/auth.constants";
@@ -17,7 +18,7 @@ type NavIcon =
   | "trips";
 
 const allNavItems = [
-  { href: "/", label: "الرئيسية", icon: "home" as const, superOnly: false },
+  { href: "/dashboard", label: "الرئيسية", icon: "home" as const, superOnly: false },
   {
     href: "/businesses",
     label: "الشركات",
@@ -133,14 +134,49 @@ function NavIconGlyph({ icon }: { icon: NavIcon }) {
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout, loading } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const navItems = allNavItems.filter(
     (item) => !item.superOnly || isSuperAdmin(user)
   );
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
+
   return (
-    <div className="admin-layout">
-      <aside className="sidebar">
+    <div className={`admin-layout${menuOpen ? " menu-open" : ""}`}>
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="admin-sidebar"
+          aria-label={menuOpen ? "إغلاق القائمة" : "فتح القائمة"}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <TrddkWordmark className="topbar-wordmark" />
+      </header>
+      {menuOpen ? (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="إغلاق القائمة"
+          onClick={() => setMenuOpen(false)}
+        />
+      ) : null}
+      <aside id="admin-sidebar" className="sidebar">
         <div className="brand">
           <TrddkWordmark className="sidebar-wordmark" />
           <div className="brand-copy">
@@ -159,8 +195,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <nav className="sidebar-nav">
           {navItems.map((item) => {
             const active =
-              item.href === "/"
-                ? pathname === "/"
+              item.href === "/dashboard"
+                ? pathname === "/dashboard"
                 : pathname.startsWith(item.href);
             return (
               <Link
