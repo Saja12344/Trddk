@@ -1,6 +1,6 @@
-# Android Setup for Shahd (Passenger App)
+# Android setup
 
-Use this once on your machine before running the Passenger app on Android emulator.
+Use this once on a machine before running the passenger or driver app on an Android emulator.
 
 ## 1) Install Android Studio
 
@@ -25,11 +25,11 @@ In Android Studio:
 
 1. Open **Device Manager** in Android Studio
 2. Click **Create Device**
-3. Pick a phone (e.g. Pixel 7)
-4. Pick a system image (API 34+ recommended)
-5. Finish and name it (e.g. `Pixel_7_API_34`)
+3. Pick a phone (for example Pixel 7)
+4. Pick a system image (API 34 or newer)
+5. Finish and name it (for example `Pixel_7_API_34`)
 
-## 4) Point Flutter to Android SDK
+## 4) Point Flutter to the Android SDK
 
 ```bash
 flutter doctor
@@ -44,25 +44,23 @@ flutter doctor --android-licenses
 
 Accept all licenses.
 
-## 5) Clone and run Passenger app
+## 5) Run an app
+
+From the repository root, after `npm install`:
 
 ```bash
-git clone https://github.com/Saja12344/tardadi.git
-cd tardadi/apps/passenger
-flutter pub get
-cd ../..
 npm run dev:passenger:android
+# or
+npm run dev:driver:android
 ```
 
-If emulator name is custom:
+If the emulator name is custom:
 
 ```bash
 ANDROID_AVD=Pixel_7_API_34 npm run dev:passenger:android
 ```
 
-## Temporary fallback (no Android yet)
-
-Run Passenger on iOS simulator instead:
+Passenger can use the iOS simulator instead:
 
 ```bash
 npm run dev:passenger:ios
@@ -74,7 +72,7 @@ npm run dev:passenger:ios
 flutter devices
 ```
 
-You should see something like:
+You should see a device similar to:
 
 ```
 sdk gphone64 arm64 (mobile) • emulator-5554 • android-arm64 • Android ...
@@ -84,13 +82,7 @@ sdk gphone64 arm64 (mobile) • emulator-5554 • android-arm64 • Android ...
 
 | Issue | Fix |
 |---|---|
-| `Unable to locate Android SDK` | Install Android Studio + run `flutter config --android-sdk` |
-| `No Android AVD found` | Create AVD in Device Manager |
-| `emulator: command not found` | Add to PATH: `~/Library/Android/sdk/emulator` |
-| App can't reach API | Backend must be running: `npm run dev:backend` on Saja's machine or shared network |
-
-## Shahd's folder to edit today
-
-```
-apps/passenger/lib/screens/map_screen.dart
-```
+| `Unable to locate Android SDK` | Install Android Studio and run `flutter config --android-sdk` |
+| `No Android AVD found` | Create an AVD in Device Manager |
+| `emulator: command not found` | Add `~/Library/Android/sdk/emulator` to `PATH` |
+| App can't reach the API | Start the backend with `npm run dev:backend` on a machine the emulator can reach |
