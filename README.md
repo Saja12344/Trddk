@@ -1,8 +1,8 @@
-# TRDDK — Bus Tracking Platform
+# ترددك (Trddk) — Bus Tracking Platform
 
-**ترددي (TRDDK)** منصة متعددة المستأجرين لتتبّع الباصات وتشغيلها.
+**ترددك (Trddk)** منصة متعددة المستأجرين لتتبّع الباصات وتشغيلها.
 
-**TRDDK** is a multi-tenant bus tracking and operations platform. The codebase still uses the legacy identifier **`tardadi`** in package names and some paths. iOS bundle IDs are registered in App Store Connect and cannot be changed.
+**Trddk** is a multi-tenant bus tracking and operations platform. The codebase still uses the legacy identifier **`tardadi`** in package names and some paths. iOS bundle IDs are registered in App Store Connect and cannot be changed.
 
 ## What this repository contains
 

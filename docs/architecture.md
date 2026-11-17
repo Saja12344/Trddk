@@ -2,7 +2,7 @@
 
 ## Overview
 
-TRDDK is a **multi-business** bus operations platform. Each **business** owns drivers, buses, routes, trips, and passenger reminders. A **super admin** manages all businesses; **business admins** manage one tenant.
+ترددك (Trddk) is a **multi-business** bus operations platform. Each **business** owns drivers, buses, routes, trips, and passenger reminders. A **super admin** manages all businesses; **business admins** manage one tenant.
 
 ```mermaid
 flowchart LR

@@ -2,7 +2,7 @@
 
 ## Threat model (summary)
 
-TRDDK handles business operations data (routes, drivers, live GPS). Primary risks:
+ترددك (Trddk) handles business operations data (routes, drivers, live GPS). Primary risks:
 
 - Unauthorized admin access across businesses
 - Leaked JWT or service account credentials

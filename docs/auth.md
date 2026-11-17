@@ -1,4 +1,4 @@
-# TRDDK Firebase Authentication Migration
+# ترددك (Trddk) Firebase Authentication Migration
 
 This document describes the transition from legacy Admin JWT + phone/OTP flows to **Firebase Authentication (Email/Password)** for all roles.
 
@@ -31,7 +31,7 @@ This document describes the transition from legacy Admin JWT + phone/OTP flows t
 ## Firebase Console checklist (`trddk-54c45`)
 
 1. **Authentication → Sign-in method**: Enable **Email/Password**
-2. **Authentication → Templates**: Customize Password reset & Email verification (Arabic/English, brand **TRDDK**)
+2. **Authentication → Templates**: Customize Password reset & Email verification (Arabic/English, brand **ترددك (Trddk)**)
 3. **Authentication → Settings → Authorized domains**:
    - `localhost`
    - `tardadi-admin--trddk-54c45.us-central1.hosted.app`
