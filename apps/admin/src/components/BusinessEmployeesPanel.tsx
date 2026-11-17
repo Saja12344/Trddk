@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { requireSaudiMobile } from "@tardadi/shared";
 import { adminFetch } from "@/lib/adminFetch";
 
 type EmployeeRecord = {
   uid: string;
   email: string;
+  phone?: string | null;
   displayName: string;
   status: string;
   roleLabel: string;
@@ -47,6 +49,8 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [message, setMessage] = useState("");
+  const [editingUid, setEditingUid] = useState<string | null>(null);
+  const [phoneDraft, setPhoneDraft] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,7 +75,7 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
     const q = search.trim().toLowerCase();
     return employees.filter((e) => {
       if (q) {
-        const hay = `${e.displayName} ${e.email}`.toLowerCase();
+        const hay = `${e.displayName} ${e.email} ${e.phone ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       switch (filter) {
@@ -106,6 +110,30 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
         body: JSON.stringify(body),
       });
       setMessage("تم التحديث.");
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function savePhone(uid: string) {
+    setError("");
+    setMessage("");
+    let phone = "";
+    try {
+      phone = requireSaudiMobile(phoneDraft);
+    } catch (err) {
+      setError((err as Error).message);
+      return;
+    }
+    try {
+      await adminFetch(`/api/businesses/${businessId}/employees/${uid}`, {
+        method: "PATCH",
+        body: JSON.stringify({ phone }),
+      });
+      setMessage("تم تحديث رقم الجوال.");
+      setEditingUid(null);
+      setPhoneDraft("");
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -149,7 +177,7 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
         <h3>المستفيدين</h3>
         <input
           type="search"
-          placeholder="بحث بالاسم أو الإيميل"
+          placeholder="بحث بالاسم أو الجوال أو الإيميل"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="input"
@@ -188,6 +216,7 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
           <thead>
             <tr>
               <th>الاسم</th>
+              <th>الجوال</th>
               <th>الإيميل</th>
               <th>الدور</th>
               <th>حالة الحساب</th>
@@ -201,16 +230,53 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
             {filtered.map((e) => (
               <tr key={e.uid}>
                 <td>{e.displayName}</td>
-                <td>{e.email}</td>
+                <td dir="ltr">
+                  {editingUid === e.uid ? (
+                    <span className="row gap">
+                      <input
+                        className="input"
+                        dir="ltr"
+                        placeholder="05XXXXXXXX"
+                        value={phoneDraft}
+                        onChange={(event) => setPhoneDraft(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => void savePhone(e.uid)}
+                      >
+                        حفظ
+                      </button>
+                    </span>
+                  ) : (
+                    e.phone || "—"
+                  )}
+                </td>
+                <td dir="ltr">{e.email || "—"}</td>
                 <td>{ROLE_LABELS[e.roleLabel] ?? e.roleLabel}</td>
                 <td>{e.status}</td>
                 <td>
-                  {e.hasPassword ? "كلمة مرور مُفعّلة" : "بانتظار كلمة المرور"}
+                  {e.phone
+                    ? "دخول برقم الجوال"
+                    : e.hasPassword
+                      ? "كلمة مرور مُفعّلة"
+                      : "بانتظار كلمة المرور"}
                   {e.membership.status === "pending" ? " · عضوية معلّقة" : ""}
                 </td>
                 <td>{e.joinedAt ? new Date(e.joinedAt).toLocaleDateString("ar-SA") : "—"}</td>
                 <td>{e.driverName ?? (e.driverId ? e.driverId : "—")}</td>
                 <td className="actions">
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => {
+                      setEditingUid(e.uid);
+                      setPhoneDraft(e.phone ?? "");
+                      setError("");
+                    }}
+                  >
+                    تعديل الجوال
+                  </button>
                   <button
                     type="button"
                     className="btn btn-sm"

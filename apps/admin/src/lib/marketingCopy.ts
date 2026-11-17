@@ -88,9 +88,17 @@ export const marketingCopy = {
     comingSoon: "قريبًا",
     driverSigninAlt: "شاشات تطبيق ترددك للسائق: تسجيل الدخول، بدء الرحلة، والتتبع على الخريطة",
     contactKicker: "للشركات",
-    contactTitle: "اطلب عرضًا توضيحيًا للمنصة",
+    contactTitle: "شغّل نقل موظفيك على ترددك",
     contactBody:
-      "موجّه للشركات التي لديها نقل ترددي. للتواصل عن المشاكل أو طلب عرض: support@tardadi.com. لوحة الإدارة محمية بتسجيل الدخول ولا تُفتح من الموقع العام.",
+      "نجهّز لشركتك الخطوط والباصات والسائقين، ونعرض لك المنصة كاملة قبل الإطلاق.",
+    contactPoints: [
+      "عرض مباشر للوحة الإدارة والتطبيقات",
+      "إعداد الخطوط والمحطات معكم",
+      "دعم فني باللغتين العربية والإنجليزية",
+    ],
+    contactCardTitle: "اطلب عرضًا توضيحيًا",
+    contactCardBody: "راسلنا وسيتواصل معك فريقنا خلال يوم عمل.",
+    contactLoginHint: "لديكم حساب شركة؟",
     contactEmailCta: "support@tardadi.com",
     contactNoEmail:
       "للتواصل عن المشاكل أو طلب عرض: support@tardadi.com. إن كان لديكم حساب شركة، استخدموا دخول الشركات.",
@@ -131,6 +139,8 @@ export const marketingCopy = {
     footerTerms: "شروط الاستخدام",
     footerAdmin: "لوحة الإدارة",
     footerNote: "السعودية · tardadi.com",
+    developedBy: "تم التطوير بواسطة شركة كور تيك",
+    footerRights: "© 2026 ترددك. جميع الحقوق محفوظة.",
     altWordmark: "TRDDK",
     metaTitle: "ترددك | منصة تتبع الحافلات وإدارة النقل",
     metaDescription:
@@ -281,9 +291,17 @@ export const marketingCopy = {
     comingSoon: "Coming soon",
     driverSigninAlt: "TRDDK Driver screens for sign-in, starting a trip, and live map tracking",
     contactKicker: "For companies",
-    contactTitle: "Request a platform demonstration",
+    contactTitle: "Run your staff transport on TRDDK",
     contactBody:
-      "For companies that run shuttle transport. For issues or a demonstration, email support@tardadi.com. The dashboard stays behind login and is not opened from the public site.",
+      "We set up your routes, buses and drivers, and walk you through the whole platform before launch.",
+    contactPoints: [
+      "Live walkthrough of the admin console and apps",
+      "Routes and stations set up together with you",
+      "Support in Arabic and English",
+    ],
+    contactCardTitle: "Request a demo",
+    contactCardBody: "Email us and our team will get back to you within one business day.",
+    contactLoginHint: "Already have a company account?",
     contactEmailCta: "support@tardadi.com",
     contactNoEmail:
       "For issues or a demonstration, email support@tardadi.com. If your company already has an account, use company login.",
@@ -324,6 +342,8 @@ export const marketingCopy = {
     footerTerms: "Terms",
     footerAdmin: "Admin console",
     footerNote: "Saudi Arabia · tardadi.com",
+    developedBy: "Developed by Core Tech",
+    footerRights: "© 2026 TRDDK. All rights reserved.",
     altWordmark: "TRDDK",
     metaTitle: "TRDDK | Bus Tracking & Transportation Management Platform",
     metaDescription:

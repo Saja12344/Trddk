@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { requireSaudiMobile } from "@tardadi/shared";
 import { adminFetch } from "@/lib/adminFetch";
 import { getUserErrorMessage } from "@/lib/errorMessage";
 
@@ -11,6 +12,7 @@ type Props = {
 
 export function AddBeneficiaryForm({ businessId, onAdded }: Props) {
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [employeeNumber, setEmployeeNumber] = useState("");
   const [department, setDepartment] = useState("");
@@ -22,12 +24,20 @@ export function AddBeneficiaryForm({ businessId, onAdded }: Props) {
     e.preventDefault();
     setError("");
     setSuccess("");
+    let normalizedPhone = "";
+    try {
+      normalizedPhone = requireSaudiMobile(phone);
+    } catch (err) {
+      setError(getUserErrorMessage(err));
+      return;
+    }
     setSaving(true);
     try {
       await adminFetch("/api/users/invite", {
         method: "POST",
         body: JSON.stringify({
-          email: email.trim(),
+          phone: normalizedPhone,
+          email: email.trim() || undefined,
           displayName: name.trim(),
           primaryRole: "employee",
           membershipRole: "employee",
@@ -36,8 +46,9 @@ export function AddBeneficiaryForm({ businessId, onAdded }: Props) {
           department: department.trim() || null,
         }),
       });
-      setSuccess("تمت إضافة المستفيد. سيصل له بريد لإنشاء كلمة المرور وتفعيل حسابه.");
+      setSuccess("تمت إضافة المستفيد. يقدر يسجّل دخوله في التطبيق برقم الجوال هذا.");
       setName("");
+      setPhone("");
       setEmail("");
       setEmployeeNumber("");
       setDepartment("");
@@ -53,8 +64,8 @@ export function AddBeneficiaryForm({ businessId, onAdded }: Props) {
     <form className="card" onSubmit={handleSubmit}>
       <h3>إضافة مستفيد</h3>
       <p className="muted">
-        المستفيد هو موظف الشركة الذي يستخدم تطبيق TRDDK كراكب (Passenger) لحجز
-        الرحلات. البريد الإلكتروني مطلوب لتسجيل الدخول.
+        المستفيد هو موظف الشركة الذي يستخدم تطبيق TRDDK كراكب. تسجيل الدخول يكون
+        برقم الجوال ورمز التحقق، بدون بريد.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
@@ -68,14 +79,25 @@ export function AddBeneficiaryForm({ businessId, onAdded }: Props) {
         />
       </div>
       <div className="field">
-        <label>البريد الإلكتروني *</label>
+        <label>رقم الجوال *</label>
+        <input
+          type="tel"
+          inputMode="numeric"
+          placeholder="05XXXXXXXX"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          dir="ltr"
+          required
+        />
+      </div>
+      <div className="field">
+        <label>البريد الإلكتروني (اختياري)</label>
         <input
           type="email"
           placeholder="employee@company.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           dir="ltr"
-          required
         />
       </div>
       <div className="field">

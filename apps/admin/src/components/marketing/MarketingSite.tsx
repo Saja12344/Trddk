@@ -235,7 +235,7 @@ export default function MarketingSite({ locale }: { locale: MarketingLocale }) {
             <h2>{t.appsTitle}</h2>
             <p className="mkt-section-lead">{t.appsLead}</p>
             <div className="mkt-apps">
-              <article className="mkt-app">
+              <article className="mkt-app mkt-app-passenger">
                 <div className="mkt-app-copy">
                   <h3>{t.passengerAppName}</h3>
                   <p>{t.passengerBody}</p>
@@ -246,16 +246,16 @@ export default function MarketingSite({ locale }: { locale: MarketingLocale }) {
                   </ul>
                   <StoreActions app="passenger" locale={locale} />
                 </div>
-                <div className="mkt-device">
+                <figure className="mkt-phones">
                   <img
-                    src="/marketing/passenger-app.jpg"
+                    src="/marketing/passenger-phones.png"
                     alt={t.heroVisualAlt}
-                    width={780}
-                    height={1696}
+                    width={1024}
+                    height={751}
                     loading="lazy"
                     decoding="async"
                   />
-                </div>
+                </figure>
               </article>
               <article className="mkt-app mkt-app-flip">
                 <div className="mkt-app-copy">
@@ -283,22 +283,45 @@ export default function MarketingSite({ locale }: { locale: MarketingLocale }) {
           </MarketingReveal>
         </Shell>
 
-        <Shell id="contact" tone="mkt-tone-accent">
+        <Shell id="contact" tone="mkt-tone-contact">
           <MarketingReveal>
-            <p className="mkt-kicker">{t.contactKicker}</p>
-            <h2>{t.contactTitle}</h2>
-            <p>{t.contactBody}</p>
-            <div className="mkt-cta">
-              {mail ? (
-                <a className="mkt-btn-primary" href={`mailto:${mail}`}>
-                  {t.contactEmailCta}
-                </a>
-              ) : (
-                <p className="mkt-contact-note">{t.contactNoEmail}</p>
-              )}
-              <Link href="/login" className="mkt-btn-ghost">
-                {t.contactLogin}
-              </Link>
+            <div className="mkt-demo">
+              <div className="mkt-demo-copy">
+                <p className="mkt-kicker">{t.contactKicker}</p>
+                <h2>{t.contactTitle}</h2>
+                <p className="mkt-demo-lead">{t.contactBody}</p>
+                <ul className="mkt-demo-points">
+                  {t.contactPoints.map((point) => (
+                    <li key={point}>
+                      <span className="mkt-demo-check" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 12.5 10 17l9-10" />
+                        </svg>
+                      </span>
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="mkt-demo-card">
+                <h3>{t.contactCardTitle}</h3>
+                <p>{t.contactCardBody}</p>
+                {mail ? (
+                  <a className="mkt-btn-primary mkt-demo-mail" href={`mailto:${mail}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                      <path d="m4 7 8 6 8-6" />
+                    </svg>
+                    <span dir="ltr">{t.contactEmailCta}</span>
+                  </a>
+                ) : (
+                  <p className="mkt-contact-note">{t.contactNoEmail}</p>
+                )}
+                <div className="mkt-demo-login">
+                  <span>{t.contactLoginHint}</span>
+                  <Link href="/login">{t.contactLogin}</Link>
+                </div>
+              </div>
             </div>
           </MarketingReveal>
         </Shell>

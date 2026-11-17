@@ -8,8 +8,8 @@ scripts
 **/ios
 **/android
 **/*.png
-!apps/admin/public/
-!apps/admin/public/**
 **/*.jpg
 **/*.webp
+!apps/admin/public/
+!apps/admin/public/**
 .git

@@ -80,7 +80,7 @@ export function BulkEmployeeImport({ businessId }: Props) {
   async function handleConfirm() {
     if (!canConfirm) return;
     const rowsToImport = importRows.filter((row) =>
-      importableRows.some((p) => p.email === row.email)
+      importableRows.some((p) => p.rowNumber === row.rowNumber && p.phone === row.phone)
     );
     setLoading(true);
     setError("");
@@ -118,8 +118,9 @@ export function BulkEmployeeImport({ businessId }: Props) {
         لم يُذكر يُعتمد راكب.
       </p>
       <p className="muted">
-        الأعمدة المدعومة: الاسم / name، الإيميل / email، الدور / role. قيم الدور: passenger،
-        driver، both، راكب، سائق، كلاهما. يدعم UTF-8 والنص العربي.
+        الأعمدة المدعومة: رقم الجوال / phone / الجوال (مطلوب)، الاسم / name، البريد /
+        email (اختياري)، الدور / role. قيم الدور: passenger، driver، both، راكب، سائق،
+        كلاهما. نفس رقم الجوال لا يُضاف مرتين للشركة. يدعم UTF-8 والنص العربي.
       </p>
       <input
         type="file"
@@ -137,6 +138,7 @@ export function BulkEmployeeImport({ businessId }: Props) {
           <ul className="muted">
             <li>إجمالي الصفوف: {preview.totalRows}</li>
             <li>صالحة: {preview.validRows}</li>
+            <li>أرقام غير صحيحة: {preview.invalidPhones ?? 0}</li>
             <li>إيميلات غير صحيحة: {preview.invalidEmails}</li>
             <li>أدوار غير مدعومة: {preview.invalidRoles ?? 0}</li>
             <li>مكررة في الملف: {preview.duplicatesInFile}</li>
@@ -157,6 +159,7 @@ export function BulkEmployeeImport({ businessId }: Props) {
               <tr>
                 <th>#</th>
                 <th>الاسم</th>
+                <th>الجوال</th>
                 <th>الإيميل</th>
                 <th>الدور</th>
                 <th>الحالة</th>
@@ -169,7 +172,8 @@ export function BulkEmployeeImport({ businessId }: Props) {
                 <tr key={row.rowNumber}>
                   <td>{row.rowNumber}</td>
                   <td>{row.displayName}</td>
-                  <td dir="ltr">{row.email}</td>
+                  <td dir="ltr">{row.phone}</td>
+                  <td dir="ltr">{row.email || "—"}</td>
                   <td>{displayRole(row)}</td>
                   <td>{row.validationStatus === "valid" ? "✓" : "✗"}</td>
                   <td>

@@ -1,5 +1,11 @@
 # Canonical production deployment
 
+## Website (`tardadi.com`)
+
+Public bilingual marketing site at `/` (Arabic) and `/en` (English), plus `/privacy` and `/terms` (and `/en/privacy`, `/en/terms`).
+Company admin console is login-protected at `/login` → `/dashboard` and is not indexed.
+App Store / Google Play URLs live in `apps/admin/src/lib/appDistribution.ts` (null until listings are published).
+
 ## Admin dashboard (`tardadi.com`)
 
 | Item | Value |

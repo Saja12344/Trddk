@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { marketingCopy, type MarketingLocale } from "@/lib/marketingCopy";
 import { siteConfig } from "@/lib/siteConfig";
+import SectionTransit from "@/components/marketing/SectionTransit";
 
 export default function MarketingFrame({
   locale,
@@ -54,11 +55,12 @@ export default function MarketingFrame({
           </details>
         </div>
       </header>
+      <SectionTransit />
       {children}
       <footer className="mkt-shell mkt-tone-footer">
         <div className="mkt-wrap mkt-footer">
         <div className="mkt-footer-grid">
-          <div>
+          <div className="mkt-footer-about">
             <div className="mkt-footer-brand">
               <img src={siteConfig.logo} alt="" width={36} height={30} />
               <span>TRDDK</span>
@@ -83,6 +85,23 @@ export default function MarketingFrame({
             <Link href={t.privacy.path}>{t.footerPrivacy}</Link>
             <Link href={t.terms.path}>{t.footerTerms}</Link>
           </div>
+        </div>
+        <div className="mkt-footer-bottom">
+          <p className="mkt-footer-rights">{t.footerRights}</p>
+          <a
+            className="mkt-credit"
+            href="https://coretech.sa"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span>{t.developedBy}</span>
+            <img
+              src="/marketing/core-tech-lockup.png"
+              alt="Core Tech"
+              width={168}
+              height={71}
+            />
+          </a>
         </div>
         </div>
       </footer>

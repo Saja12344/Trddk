@@ -21,11 +21,17 @@ export const appDistribution: Record<
 > = {
   passenger: {
     ios: { url: null, storeId: null },
-    android: { url: null, storeId: null },
+    android: {
+      url: "https://play.google.com/store/apps/details?id=com.tardadi.tardadi_passenger",
+      storeId: "com.tardadi.tardadi_passenger",
+    },
   },
   driver: {
     ios: { url: null, storeId: null },
-    android: { url: null, storeId: null },
+    android: {
+      url: "https://play.google.com/store/apps/details?id=com.tardadi.tardadi_driver",
+      storeId: "com.tardadi.tardadi_driver",
+    },
   },
 };
 
