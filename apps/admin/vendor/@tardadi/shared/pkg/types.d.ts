@@ -83,6 +83,14 @@ export interface CreateBusinessRequest {
     adminEmail: string;
     adminPhone?: string | null;
 }
+export interface UpdateBusinessRequest {
+    name?: string;
+    logo?: string | null;
+    status?: EntityStatus;
+    adminName?: string;
+    adminEmail?: string;
+    adminPhone?: string;
+}
 export type ManagerInvitationStatus = "invitation_pending" | "email_verified" | "active" | "suspended" | "incomplete" | "invitation_failed";
 export interface CompanyManagerSummary {
     uid: string | null;
@@ -96,14 +104,6 @@ export interface CompanyManagerSummary {
     mfaEnabled: boolean;
     lastLoginAt: string | null;
     incompleteReason?: string | null;
-}
-export interface UpdateBusinessRequest {
-    name?: string;
-    logo?: string | null;
-    status?: EntityStatus;
-    adminName?: string;
-    adminEmail?: string;
-    adminPhone?: string;
 }
 export interface Driver {
     driverId: string;

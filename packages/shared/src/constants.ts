@@ -30,6 +30,7 @@ export const COLLECTIONS = {
   gpsLogs: "gps_logs",
   reminders: "reminders",
   passengerOtp: "passenger_otp",
+  driverOtp: "driver_otp",
   adminOtp: "admin_otp",
   adminMfaChallenges: "admin_mfa_challenges",
 } as const;

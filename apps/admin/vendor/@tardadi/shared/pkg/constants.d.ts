@@ -27,6 +27,7 @@ export declare const COLLECTIONS: {
     readonly gpsLogs: "gps_logs";
     readonly reminders: "reminders";
     readonly passengerOtp: "passenger_otp";
+    readonly driverOtp: "driver_otp";
     readonly adminOtp: "admin_otp";
     readonly adminMfaChallenges: "admin_mfa_challenges";
 };

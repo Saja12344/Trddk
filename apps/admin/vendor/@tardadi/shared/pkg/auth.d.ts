@@ -11,6 +11,8 @@ export declare function isAdminPanelRole(role: string): role is AdminPanelRole;
 export interface TrddkUser {
     uid: string;
     email: string;
+    /** E.164 when the person signs in with a mobile number. */
+    phone?: string | null;
     displayName: string;
     primaryRole: PrimaryRole;
     status: AccountStatus;
@@ -31,6 +33,8 @@ export interface BusinessMembership {
     driverId?: string | null;
     department?: string | null;
     employeeNumber?: string | null;
+    /** E.164 mobile used for passenger sign-in, when set. */
+    phone?: string | null;
     /** Can use Passenger app for this business (default true for employee imports). */
     passengerAccess?: boolean;
     /** Can use Driver app / driver assignments for this business. */
@@ -54,7 +58,10 @@ export interface FirebaseSessionResponse {
     idToken?: string;
 }
 export interface InviteUserRequest {
-    email: string;
+    /** Required for company managers. Optional for phone beneficiaries. */
+    email?: string;
+    /** Required E.164 (or a Saudi mobile that the server normalizes) for beneficiaries. */
+    phone?: string | null;
     displayName: string;
     primaryRole: PrimaryRole;
     businessId?: string | null;
@@ -65,7 +72,9 @@ export interface InviteUserRequest {
 export interface BulkImportRow {
     rowNumber: number;
     displayName: string;
+    /** Optional. Phone is the sign-in identifier for beneficiaries. */
     email: string;
+    phone: string;
     employeeNumber?: string | null;
     role?: MembershipRole | null;
     department?: string | null;
@@ -88,6 +97,7 @@ export interface BulkImportPreview {
     duplicatesInFile: number;
     existingUsers: number;
     missingRequired: number;
+    invalidPhones?: number;
     invalidRoles?: number;
     preview: BulkImportPreviewRow[];
     errors: Array<{
@@ -103,6 +113,7 @@ export interface BulkImportResult {
     failed: number;
     details: Array<{
         email: string;
+        phone?: string;
         status: "created" | "linked" | "updated" | "skipped" | "failed";
         message?: string;
     }>;
