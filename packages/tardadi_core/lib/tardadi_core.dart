@@ -22,3 +22,5 @@ export 'src/utils/station_count.dart';
 export 'src/utils/eta_utils.dart';
 export 'src/utils/route_polyline.dart';
 export 'src/utils/heading_utils.dart';
+export 'src/support/support_email.dart';
+export 'src/platform/google_play_services.dart';

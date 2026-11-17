@@ -79,6 +79,7 @@ class PassengerBusinessSessionResult {
     required this.businessId,
     required this.businessName,
     required this.email,
+    this.phone = '',
   });
 
   factory PassengerBusinessSessionResult.fromJson(Map<String, dynamic> json) {
@@ -86,7 +87,8 @@ class PassengerBusinessSessionResult {
       sessionToken: json['sessionToken'] as String,
       businessId: json['businessId'] as String,
       businessName: json['businessName'] as String? ?? json['businessId'] as String,
-      email: json['email'] as String,
+      email: json['email'] as String? ?? '',
+      phone: json['phone'] as String? ?? '',
     );
   }
 
@@ -94,4 +96,5 @@ class PassengerBusinessSessionResult {
   final String businessId;
   final String businessName;
   final String email;
+  final String phone;
 }

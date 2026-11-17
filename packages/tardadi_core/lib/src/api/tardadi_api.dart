@@ -29,6 +29,7 @@ class TardadiApi {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     String? baseUrl,
+    Duration timeout = const Duration(seconds: 15),
     required T Function(dynamic data) parser,
   }) async {
     final uri = baseUrl == null
@@ -48,7 +49,7 @@ class TardadiApi {
         ),
       'DELETE' => http.delete(uri, headers: headers.isEmpty ? null : headers),
       _ => throw UnsupportedError('Unsupported method: $method'),
-    }.timeout(const Duration(seconds: 15));
+    }.timeout(timeout);
 
     Map<String, dynamic> decoded;
     try {
@@ -115,6 +116,21 @@ class TardadiApi {
         'phone': phone,
       },
       parser: (_) {},
+    );
+  }
+
+  Future<DriverSession> driverReviewLogin({
+    required String phone,
+    required String code,
+  }) {
+    return _request(
+      '/api/auth/driver-review-login',
+      method: 'POST',
+      body: {
+        'phone': phone,
+        'code': code,
+      },
+      parser: _parseDriverSession,
     );
   }
 
@@ -263,6 +279,44 @@ class TardadiApi {
       '/api/auth/passenger-verify-otp',
       method: 'POST',
       body: {'email': email, 'code': code, 'purpose': purpose},
+      parser: (data) => PassengerOtpVerifyResult.fromJson(
+        data as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  Future<void> passengerStartPhoneLogin({
+    required String phone,
+  }) {
+    return _request(
+      '/api/auth/passenger-start-phone-login',
+      method: 'POST',
+      body: {'phone': phone},
+      parser: (_) {},
+    );
+  }
+
+  Future<PassengerOtpVerifyResult> passengerVerifyPhoneOtp({
+    required String phone,
+    required String code,
+  }) {
+    return _request(
+      '/api/auth/passenger-verify-phone-otp',
+      method: 'POST',
+      body: {'phone': phone, 'code': code},
+      parser: (data) => PassengerOtpVerifyResult.fromJson(
+        data as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  Future<PassengerOtpVerifyResult> passengerPhoneLogin({
+    required String idToken,
+  }) {
+    return _request(
+      '/api/auth/passenger-phone-login',
+      method: 'POST',
+      body: {'idToken': idToken},
       parser: (data) => PassengerOtpVerifyResult.fromJson(
         data as Map<String, dynamic>,
       ),
@@ -467,6 +521,115 @@ class TardadiApi {
       '/api/reminders/$reminderId',
       method: 'DELETE',
       parser: (_) {},
+    );
+  }
+
+  Future<DriverNavigationRoute> fetchDriverNavigation({
+    required GeoPoint origin,
+    double? heading,
+    required List<GeoPoint> waypoints,
+    required GeoPoint destination,
+    required String language,
+  }) {
+    return _request(
+      '/api/routing/navigation',
+      method: 'POST',
+      timeout: const Duration(seconds: 20),
+      body: {
+        'origin': {
+          'latitude': origin.latitude,
+          'longitude': origin.longitude,
+          if (heading != null) 'heading': heading,
+        },
+        'waypoints': [
+          for (final point in waypoints)
+            {'latitude': point.latitude, 'longitude': point.longitude},
+        ],
+        'destination': {
+          'latitude': destination.latitude,
+          'longitude': destination.longitude,
+        },
+        'language': language,
+      },
+      parser: (data) => DriverNavigationRoute.fromJson(
+        data as Map<String, dynamic>,
+      ),
+    );
+  }
+}
+
+class DriverNavigationStep {
+  const DriverNavigationStep({
+    required this.maneuver,
+    required this.instruction,
+    required this.distanceMeters,
+    required this.start,
+  });
+
+  final String maneuver;
+  final String instruction;
+  final double distanceMeters;
+  final GeoPoint start;
+
+  factory DriverNavigationStep.fromJson(Map<String, dynamic> json) {
+    final start = json['start'];
+    final startMap = start is Map<String, dynamic> ? start : <String, dynamic>{};
+    return DriverNavigationStep(
+      maneuver: json['maneuver'] as String? ?? 'STRAIGHT',
+      instruction: json['instruction'] as String? ?? '',
+      distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0,
+      start: GeoPoint(
+        latitude: (startMap['latitude'] as num?)?.toDouble() ?? 0,
+        longitude: (startMap['longitude'] as num?)?.toDouble() ?? 0,
+      ),
+    );
+  }
+}
+
+class DriverNavigationRoute {
+  const DriverNavigationRoute({
+    required this.points,
+    required this.distanceMeters,
+    required this.durationSeconds,
+    required this.steps,
+  });
+
+  final List<GeoPoint> points;
+  final double distanceMeters;
+  final int durationSeconds;
+  final List<DriverNavigationStep> steps;
+
+  factory DriverNavigationRoute.fromJson(Map<String, dynamic> json) {
+    final rawPoints = json['points'];
+    final points = <GeoPoint>[];
+    if (rawPoints is List) {
+      for (final point in rawPoints) {
+        if (point is List && point.length >= 2) {
+          points.add(
+            GeoPoint(
+              latitude: (point[0] as num).toDouble(),
+              longitude: (point[1] as num).toDouble(),
+            ),
+          );
+        }
+      }
+    }
+    final rawSteps = json['steps'];
+    final steps = rawSteps is List
+        ? rawSteps
+            .whereType<Map>()
+            .map(
+              (step) => DriverNavigationStep.fromJson(
+                Map<String, dynamic>.from(step),
+              ),
+            )
+            .toList()
+        : <DriverNavigationStep>[];
+    return DriverNavigationRoute(
+      points: points,
+      distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0,
+      durationSeconds: (json['durationSeconds'] as num?)?.round() ?? 0,
+      steps: steps,
     );
   }
 }

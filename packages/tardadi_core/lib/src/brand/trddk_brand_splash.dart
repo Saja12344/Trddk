@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'trddk_brand_assets.dart';
@@ -184,7 +185,9 @@ class _TrddkBrandSplashState extends State<TrddkBrandSplash>
       height: height,
       width: width,
       fit: BoxFit.contain,
-      filterQuality: FilterQuality.high,
+      filterQuality: defaultTargetPlatform == TargetPlatform.android
+          ? FilterQuality.medium
+          : FilterQuality.high,
       gaplessPlayback: true,
     );
   }

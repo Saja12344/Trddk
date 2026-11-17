@@ -7,7 +7,7 @@ abstract final class TrddkGoogleMapsConfig {
   static const defaultMapId = '60c310628a438a911067393f';
 
   /// Same GCP project as Admin — required for cloud Map ID styling.
-  static const defaultApiKey = 'AIzaSyA9F15H3pU03Jq7Fi5LbH-3xbNVRJX6aSA';
+  static const defaultApiKey = 'AIzaSyAmVXpB4849FWhnK96ea2bg3Q-tO8aOdok';
 
   static const apiKey = String.fromEnvironment(
     'TRDDK_GOOGLE_MAPS_API_KEY',

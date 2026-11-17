@@ -4,12 +4,18 @@ class LocationPlace {
     required this.latitude,
     required this.longitude,
     this.addressAr,
+    this.addressEn,
   });
 
   final String address;
   final double latitude;
   final double longitude;
   final String? addressAr;
+  final String? addressEn;
+
+  /// Address in the app's language (auto-translated by the API when needed).
+  String displayAddress({required bool arabic}) =>
+      _pick(address, arabic ? addressAr : addressEn);
 
   factory LocationPlace.fromJson(Map<String, dynamic> json) {
     return LocationPlace(
@@ -17,6 +23,7 @@ class LocationPlace {
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
       addressAr: json['addressAr'] as String?,
+      addressEn: json['addressEn'] as String?,
     );
   }
 
@@ -35,6 +42,7 @@ class RouteModel {
     this.toLocation,
     this.polyline,
     this.nameAr,
+    this.nameEn,
     this.stopsCount,
     this.activeBusCount,
     this.liveBusCount,
@@ -51,6 +59,7 @@ class RouteModel {
   final LocationPlace? toLocation;
   final String? polyline;
   final String? nameAr;
+  final String? nameEn;
   final int? stopsCount;
   final int? activeBusCount;
   final int? liveBusCount;
@@ -58,6 +67,10 @@ class RouteModel {
   final String? businessId;
 
   bool get isBusiness => accessMode == 'private';
+
+  /// Route name in the app's language (auto-translated by the API when needed).
+  String displayName({required bool arabic}) =>
+      _pick(name, arabic ? nameAr : nameEn);
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
     final from = json['fromLocation'] as Map<String, dynamic>?;
@@ -72,6 +85,7 @@ class RouteModel {
       toLocation: to == null ? null : LocationPlace.fromJson(to),
       polyline: json['polyline'] as String?,
       nameAr: json['nameAr'] as String?,
+      nameEn: json['nameEn'] as String?,
       stopsCount: (json['stopsCount'] as num?)?.toInt(),
       activeBusCount: (json['activeBusCount'] as num?)?.toInt(),
       liveBusCount: (json['liveBusCount'] as num?)?.toInt(),
@@ -91,6 +105,7 @@ class StopModel {
     required this.longitude,
     required this.sequenceNo,
     this.nameAr,
+    this.nameEn,
   });
 
   final String stopId;
@@ -100,6 +115,11 @@ class StopModel {
   final double longitude;
   final int sequenceNo;
   final String? nameAr;
+  final String? nameEn;
+
+  /// Station name in the app's language (auto-translated by the API when needed).
+  String displayName({required bool arabic}) =>
+      _pick(name, arabic ? nameAr : nameEn);
 
   factory StopModel.fromJson(Map<String, dynamic> json) {
     return StopModel(
@@ -110,6 +130,7 @@ class StopModel {
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
       sequenceNo: json['sequenceNo'] as int? ?? 0,
       nameAr: json['nameAr'] as String?,
+      nameEn: json['nameEn'] as String?,
     );
   }
 }
@@ -303,4 +324,9 @@ class RouteLiveSnapshot {
       activeBusCount: (json['activeBusCount'] as num?)?.toInt() ?? 0,
     );
   }
+}
+
+String _pick(String original, String? localized) {
+  final value = localized?.trim();
+  return value == null || value.isEmpty ? original : value;
 }

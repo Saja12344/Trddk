@@ -22,9 +22,14 @@ abstract final class TrddkMapStyle {
       r'{"featureType":"transit","elementType":"geometry","stylers":[{"color":"#24277a"}]},'
       r'{"featureType":"water","elementType":"geometry","stylers":[{"color":"#0e1133"}]}]';
 
-  /// Prefer cloud Map ID only when explicitly enabled (requires Maps SDK on same GCP project).
+  /// Use the "trddk" cloud style (Map ID from Google Cloud Map Management)
+  /// on every platform, so the apps look exactly like the admin map.
+  /// The Map ID must be enabled for Android and iOS in Map Management.
+  /// Build with --dart-define=TRDDK_USE_CLOUD_MAP_ID=false to fall back to
+  /// the bundled dark-navy JSON style.
   static bool get useCloudMapId {
-    const enabled = bool.fromEnvironment('TRDDK_USE_CLOUD_MAP_ID');
+    const enabled =
+        bool.fromEnvironment('TRDDK_USE_CLOUD_MAP_ID', defaultValue: true);
     return kIsWeb || enabled;
   }
 
@@ -44,6 +49,15 @@ abstract final class TrddkMapStyle {
       await controller.setMapStyle(style);
       // Brief pause so styled tiles render before revealing the map.
       await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        // Android's renderer can finish initialising after the first call and
+        // drop the style, so apply it once more after it has settled.
+        Future<void>.delayed(const Duration(milliseconds: 700), () async {
+          try {
+            await controller.setMapStyle(style);
+          } catch (_) {}
+        });
+      }
       return true;
     } catch (_) {
       return false;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,8 @@ class DriverNavigationGoogleMap extends StatefulWidget {
     this.cameraTilt = 55,
     this.borderRadius = 0,
     this.roadPolyline,
+    this.trimTraveled = false,
+    this.followTopPadding = 64,
   });
 
   final RouteModel route;
@@ -39,6 +42,8 @@ class DriverNavigationGoogleMap extends StatefulWidget {
   final double cameraTilt;
   final double borderRadius;
   final List<LatLng>? roadPolyline;
+  final bool trimTraveled;
+  final double followTopPadding;
 
   @override
   State<DriverNavigationGoogleMap> createState() =>
@@ -58,12 +63,27 @@ class _DriverNavigationGoogleMapState extends State<DriverNavigationGoogleMap> {
 
   static const _emptyInfo = gmaps.InfoWindow();
 
+  static const _revealTimeout = Duration(milliseconds: 1500);
+  Timer? _revealSafety;
+
+  void _reveal() {
+    _revealSafety?.cancel();
+    if (mounted && !_mapVisible) setState(() => _mapVisible = true);
+  }
+
   @override
   void initState() {
     super.initState();
     _followEnabled = widget.followMode;
     _loadIcons();
     _rebuildOverlays();
+    _revealSafety = Timer(const Duration(seconds: 4), _reveal);
+  }
+
+  @override
+  void dispose() {
+    _revealSafety?.cancel();
+    super.dispose();
   }
 
   @override
@@ -138,13 +158,26 @@ class _DriverNavigationGoogleMapState extends State<DriverNavigationGoogleMap> {
 
     if (widget.followMode && driverLatLng != null) {
       final split = nearestPointIndex(points, driverLatLng);
+      final remaining = <LatLng>[driverLatLng, ...points.skip(split + 1)];
+      if (widget.trimTraveled) {
+        return {
+          if (remaining.length >= 2)
+            gmaps.Polyline(
+              polylineId: const gmaps.PolylineId('remaining'),
+              points: remaining.map(_g).toList(growable: false),
+              color: widget.routeColor,
+              width: 7,
+              geodesic: true,
+            ),
+        };
+      }
+
       final traveled = points.take(split + 1).toList();
       if (traveled.isEmpty ||
           traveled.last.latitude != driverLatLng.latitude ||
           traveled.last.longitude != driverLatLng.longitude) {
         traveled.add(driverLatLng);
       }
-      final remaining = <LatLng>[driverLatLng, ...points.skip(split + 1)];
 
       return {
         if (traveled.length >= 2)
@@ -379,7 +412,12 @@ class _DriverNavigationGoogleMapState extends State<DriverNavigationGoogleMap> {
     final mapId = TrddkMapStyle.cloudMapId;
     final mapStyle = TrddkMapStyle.nativeStyleJson;
     final navPadding = widget.followMode
-        ? const EdgeInsets.only(top: 64, bottom: 200, left: 40, right: 40)
+        ? EdgeInsets.only(
+            top: widget.followTopPadding,
+            bottom: 200,
+            left: 40,
+            right: 40,
+          )
         : EdgeInsets.zero;
 
     return ClipRRect(
@@ -416,13 +454,16 @@ class _DriverNavigationGoogleMapState extends State<DriverNavigationGoogleMap> {
               },
               onMapCreated: (controller) async {
                 _controller = controller;
-                await TrddkMapStyle.applyNativeStyle(controller);
+                await TrddkMapStyle.applyNativeStyle(controller)
+                    .timeout(_revealTimeout, onTimeout: () => false);
                 if (widget.followMode && widget.driverPosition != null) {
-                  await _animateNavigationCamera();
+                  await _animateNavigationCamera()
+                      .timeout(_revealTimeout, onTimeout: () {});
                 } else {
-                  await _fitOverview();
+                  await _fitOverview()
+                      .timeout(_revealTimeout, onTimeout: () {});
                 }
-                if (mounted) setState(() => _mapVisible = true);
+                _reveal();
               },
             ),
           ),

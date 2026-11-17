@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -52,11 +53,38 @@ class _PassengerTrackingGoogleMapState extends State<PassengerTrackingGoogleMap>
 
   static const _emptyInfo = gmaps.InfoWindow();
 
+  static const _revealTimeout = Duration(milliseconds: 1500);
+  Timer? _revealSafety;
+
+  void _reveal() {
+    _revealSafety?.cancel();
+    if (mounted && !_mapVisible) setState(() => _mapVisible = true);
+  }
+
   @override
   void initState() {
     super.initState();
     _loadIcons();
     _rebuildOverlays();
+    _revealSafety = Timer(const Duration(seconds: 4), _reveal);
+  }
+
+  var _arabic = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final arabic = Directionality.of(context) == TextDirection.rtl;
+    if (arabic != _arabic) {
+      _arabic = arabic;
+      _rebuildOverlays();
+    }
+  }
+
+  @override
+  void dispose() {
+    _revealSafety?.cancel();
+    super.dispose();
   }
 
   @override
@@ -155,7 +183,7 @@ class _PassengerTrackingGoogleMapState extends State<PassengerTrackingGoogleMap>
                   gmaps.BitmapDescriptor.defaultMarkerWithHue(
                     gmaps.BitmapDescriptor.hueAzure,
                   )),
-          infoWindow: gmaps.InfoWindow(title: stop.name),
+          infoWindow: gmaps.InfoWindow(title: stop.displayName(arabic: _arabic)),
           anchor: const Offset(0.5, 0.5),
           zIndexInt: isNext ? 3 : 1,
         ),
@@ -344,9 +372,14 @@ class _PassengerTrackingGoogleMapState extends State<PassengerTrackingGoogleMap>
               compassEnabled: false,
               onMapCreated: (controller) async {
                 _controller = controller;
-                await TrddkMapStyle.applyNativeStyle(controller);
-                await _fitTrackingBounds();
-                if (mounted) setState(() => _mapVisible = true);
+                // On Android, camera/style futures can stall (e.g. while a
+                // permission dialog pauses the activity), which used to leave
+                // an empty box. Cap the wait, then always reveal the map.
+                await TrddkMapStyle.applyNativeStyle(controller)
+                    .timeout(_revealTimeout, onTimeout: () => false);
+                await _fitTrackingBounds()
+                    .timeout(_revealTimeout, onTimeout: () {});
+                _reveal();
               },
             ),
           ),
