@@ -25,14 +25,14 @@ test("review phone normalizes to the store number only", () => {
   assert.equal(isStoreReviewPhone("+966511111111"), false);
 });
 
-test("review login fails closed unless the environment code is 8 digits", () => {
+test("review login uses the reviewer default unless an 8-digit env code replaces it", () => {
   const previous = process.env.PASSENGER_REVIEW_OTP;
   try {
     delete process.env.PASSENGER_REVIEW_OTP;
-    assert.equal(expectedReviewOtp(), null);
-    assert.equal(reviewLoginDecision(STORE_REVIEW_PHONE, REVIEW_CODE).ok, false);
+    assert.equal(expectedReviewOtp(), "84729163");
+    assert.equal(reviewLoginDecision(STORE_REVIEW_PHONE, "84729163").ok, true);
     process.env.PASSENGER_REVIEW_OTP = "1234";
-    assert.equal(expectedReviewOtp(), null);
+    assert.equal(expectedReviewOtp(), "84729163");
     assert.equal(reviewLoginDecision(STORE_REVIEW_PHONE, "1234").ok, false);
   } finally {
     process.env.PASSENGER_REVIEW_OTP = previous;

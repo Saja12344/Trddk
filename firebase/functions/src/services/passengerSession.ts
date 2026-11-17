@@ -1,5 +1,5 @@
 import type { AccountStatus, BusinessMembership, TrddkUser } from "@tardadi/shared";
-import { COLLECTIONS } from "@tardadi/shared";
+import { COLLECTIONS, normalizePhone, phoneCandidates } from "@tardadi/shared";
 import { admin, db } from "../firebase";
 import { getJwtSecret, signJwt, verifyJwt } from "../auth/crypto";
 import { loadAuthenticatedUser } from "../auth/firebaseAuth";
@@ -19,6 +19,7 @@ export interface PassengerMembershipSummary {
 export interface PassengerSessionPayload {
   sub: string;
   email: string;
+  phone: string;
   businessId: string;
   iat: number;
   exp: number;
@@ -41,18 +42,39 @@ export function signPassengerVerificationToken(email: string, uid: string): stri
   );
 }
 
+function identityIsPhone(value: string): boolean {
+  return value.trim().startsWith("+");
+}
+
+export function signPassengerPhoneVerificationToken(phone: string, uid: string): string {
+  const normalized = normalizePhone(phone);
+  return signJwt(
+    {
+      sub: uid,
+      role: "passenger_verify",
+      businessId: normalized,
+      name: normalized,
+      phone: normalized,
+    },
+    getJwtSecret(),
+    VERIFICATION_TTL_SEC
+  );
+}
+
 export function signPassengerSessionToken(
   uid: string,
   email: string,
-  businessId: string
+  businessId: string,
+  phone = ""
 ): string {
+  const identity = phone.trim() || email;
   return signJwt(
     {
       sub: uid,
       role: "passenger_session",
       businessId,
-      name: email,
-      phone: email,
+      name: email || phone,
+      phone: identity,
     },
     getJwtSecret(),
     SESSION_TTL_SEC
@@ -64,9 +86,12 @@ export function parsePassengerSessionToken(
 ): PassengerSessionPayload | null {
   const payload = verifyJwt(token, getJwtSecret());
   if (!payload || payload.role !== "passenger_session") return null;
+  const identity = payload.phone ?? "";
+  const phone = identityIsPhone(identity) ? identity : "";
   return {
     sub: payload.sub,
-    email: payload.phone,
+    email: phone ? "" : identity,
+    phone,
     businessId: payload.businessId ?? "",
     iat: payload.iat,
     exp: payload.exp,
@@ -75,10 +100,12 @@ export function parsePassengerSessionToken(
 
 export function parsePassengerVerificationToken(
   token: string
-): { uid: string; email: string } | null {
+): { uid: string; email: string; phone: string } | null {
   const payload = verifyJwt(token, getJwtSecret());
   if (!payload || payload.role !== "passenger_verify") return null;
-  return { uid: payload.sub, email: payload.phone };
+  const identity = payload.phone ?? "";
+  const phone = identityIsPhone(identity) ? identity : "";
+  return { uid: payload.sub, email: phone ? "" : identity, phone };
 }
 
 export async function resolvePassengerUserByEmail(
@@ -145,12 +172,9 @@ export async function activatePassengerAccess(
   }
 }
 
-export async function listPassengerMemberships(
-  email: string
+async function listMembershipsForUid(
+  uid: string
 ): Promise<PassengerMembershipSummary[]> {
-  const normalized = normalizeEmail(email);
-  const uid = await passengerUidForEmail(normalized);
-  if (!uid) return [];
   const membershipsSnap = await db
     .collection(COLLECTIONS.users)
     .doc(uid)
@@ -192,6 +216,73 @@ export async function listPassengerMemberships(
   }
 
   return summaries;
+}
+
+export async function listPassengerMemberships(
+  email: string
+): Promise<PassengerMembershipSummary[]> {
+  const normalized = normalizeEmail(email);
+  const uid = await passengerUidForEmail(normalized);
+  if (!uid) return [];
+  return listMembershipsForUid(uid);
+}
+
+const NOT_REGISTERED = "Phone number is not registered. Contact your employer.";
+
+function storedPhoneMatches(stored: string, tokenPhone: string): boolean {
+  if (!stored.trim()) return false;
+  const storedSet = new Set(phoneCandidates(stored));
+  return phoneCandidates(tokenPhone).some((candidate) => storedSet.has(candidate));
+}
+
+/** Memberships for the Firebase user who just proved this phone via idToken. */
+export async function listPassengerMembershipsByPhone(
+  uid: string,
+  phoneFromToken: string
+): Promise<{
+  verificationToken: string;
+  memberships: PassengerMembershipSummary[];
+}> {
+  const phone = normalizePhone(phoneFromToken);
+  if (!phone.startsWith("+")) {
+    throw new Error(NOT_REGISTERED);
+  }
+
+  const userSnap = await db.collection(COLLECTIONS.users).doc(uid).get();
+  if (!userSnap.exists) {
+    throw new Error(NOT_REGISTERED);
+  }
+
+  const data = userSnap.data()!;
+  const storedPhone = (data.phone as string | undefined) ?? "";
+  const membershipPhoneSnap = await userSnap.ref.collection(COLLECTIONS.memberships).get();
+  const membershipPhones = membershipPhoneSnap.docs
+    .map((doc) => (doc.data().phone as string | undefined) ?? "")
+    .filter(Boolean);
+  const matches =
+    storedPhoneMatches(storedPhone, phone) ||
+    membershipPhones.some((value) => storedPhoneMatches(value, phone));
+  if (!matches) {
+    throw new Error(NOT_REGISTERED);
+  }
+
+  const memberships = await listMembershipsForUid(uid);
+  if (memberships.length === 0) {
+    throw new Error(NOT_REGISTERED);
+  }
+
+  await activatePassengerAccess(
+    uid,
+    memberships.map((membership) => membership.businessId)
+  );
+
+  return {
+    verificationToken: signPassengerPhoneVerificationToken(phone, uid),
+    memberships: memberships.map((membership) => ({
+      ...membership,
+      status: (membership.status === "pending" ? "active" : membership.status) as typeof membership.status,
+    })),
+  };
 }
 
 export async function assertPassengerBusinessAccess(

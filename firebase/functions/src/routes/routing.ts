@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { COLLECTIONS } from "@tardadi/shared";
 import { businessRef } from "../business/helpers";
+import { bearerToken, parseDriverSessionToken } from "../auth/driverAccess";
+import { consumeRateLimit } from "../auth/rateLimit";
 import { db } from "../firebase";
 import { fail, getOrgId, ok } from "../utils";
 
@@ -309,3 +311,255 @@ router.post("/route", async (req: Request, res: Response) => {
 });
 
 export default router;
+
+const NAVIGATION_FIELD_MASK = [
+  "routes.duration",
+  "routes.distanceMeters",
+  "routes.polyline.encodedPolyline",
+  "routes.legs.steps.navigationInstruction",
+  "routes.legs.steps.distanceMeters",
+  "routes.legs.steps.polyline.encodedPolyline",
+  "routes.legs.steps.startLocation",
+].join(",");
+
+const MAX_INTERMEDIATES = 25;
+const NAV_RATE_LIMIT = 40;
+const NAV_RATE_WINDOW_MS = 10 * 60 * 1000;
+
+type NavStep = {
+  maneuver: string;
+  instruction: string;
+  distanceMeters: number;
+  start: LatLng;
+};
+
+function readLatLng(value: unknown): LatLng | null {
+  if (!value || typeof value !== "object") return null;
+  const latitude = (value as { latitude?: unknown }).latitude;
+  const longitude = (value as { longitude?: unknown }).longitude;
+  if (typeof latitude !== "number" || typeof longitude !== "number") return null;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return null;
+  }
+  return { latitude, longitude };
+}
+
+function parseDurationSeconds(duration: string | undefined): number {
+  if (!duration) return 0;
+  const match = duration.match(/^(\d+(?:\.\d+)?)s$/);
+  if (!match) return 0;
+  return Math.round(parseFloat(match[1]));
+}
+
+function readNavigationSteps(route: {
+  legs?: Array<{
+    steps?: Array<{
+      distanceMeters?: number;
+      startLocation?: { latLng?: { latitude?: number; longitude?: number } };
+      navigationInstruction?: { maneuver?: string; instructions?: string };
+    }>;
+  }>;
+}): NavStep[] {
+  const steps: NavStep[] = [];
+  for (const leg of route.legs ?? []) {
+    for (const step of leg.steps ?? []) {
+      const start = readLatLng(step.startLocation?.latLng);
+      if (!start) continue;
+      const instruction = step.navigationInstruction?.instructions?.trim() ?? "";
+      const maneuver = step.navigationInstruction?.maneuver?.trim() || "STRAIGHT";
+      steps.push({
+        maneuver,
+        instruction,
+        distanceMeters: step.distanceMeters ?? 0,
+        start,
+      });
+    }
+  }
+  return steps;
+}
+
+async function fetchNavigationRoute(
+  origin: LatLng,
+  destination: LatLng,
+  intermediates: LatLng[],
+  language: "ar" | "en",
+  apiKey: string,
+): Promise<{
+  points: LatLng[];
+  distanceMeters: number;
+  durationSeconds: number;
+  steps: NavStep[];
+} | null> {
+  const body: Record<string, unknown> = {
+    origin: {
+      location: {
+        latLng: { latitude: origin.latitude, longitude: origin.longitude },
+      },
+    },
+    destination: {
+      location: {
+        latLng: {
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+        },
+      },
+    },
+    travelMode: "DRIVE",
+    routingPreference: "TRAFFIC_UNAWARE",
+    polylineQuality: "HIGH_QUALITY",
+    polylineEncoding: "ENCODED_POLYLINE",
+    computeAlternativeRoutes: false,
+    languageCode: language,
+    units: "METRIC",
+  };
+
+  if (intermediates.length > 0) {
+    body.intermediates = intermediates.slice(0, MAX_INTERMEDIATES).map((point) => ({
+      location: {
+        latLng: { latitude: point.latitude, longitude: point.longitude },
+      },
+    }));
+  }
+
+  const response = await fetch(
+    "https://routes.googleapis.com/directions/v2:computeRoutes",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": NAVIGATION_FIELD_MASK,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+
+  if (!response.ok) {
+    console.warn(
+      "Google navigation route failed:",
+      response.status,
+      (await response.text()).slice(0, 500),
+    );
+    return null;
+  }
+
+  const data = (await response.json()) as {
+    routes?: Array<{
+      distanceMeters?: number;
+      duration?: string;
+      polyline?: { encodedPolyline?: string };
+      legs?: Array<{
+        steps?: Array<{
+          distanceMeters?: number;
+          startLocation?: { latLng?: { latitude?: number; longitude?: number } };
+          navigationInstruction?: { maneuver?: string; instructions?: string };
+        }>;
+      }>;
+    }>;
+  };
+
+  const route = data.routes?.[0];
+  const encoded = route?.polyline?.encodedPolyline;
+  if (!route || !encoded) return null;
+
+  const points = decodeGoogleEncodedPolyline(encoded);
+  if (points.length < 2) return null;
+
+  return {
+    points,
+    distanceMeters: route.distanceMeters ?? polylineLengthMeters(points),
+    durationSeconds: parseDurationSeconds(route.duration),
+    steps: readNavigationSteps(route),
+  };
+}
+
+function sendNavigationError(
+  res: Response,
+  status: number,
+  error: string,
+): void {
+  res.status(status).json({ success: false, error });
+}
+
+export const navigationRouter = Router();
+
+navigationRouter.post("/navigation", async (req: Request, res: Response) => {
+  try {
+    const token = bearerToken(req);
+    const driver = token ? parseDriverSessionToken(token) : null;
+    if (!driver) {
+      sendNavigationError(res, 401, "يجب تسجيل الدخول للوصول لهذا الطلب.");
+      return;
+    }
+
+    const limit = consumeRateLimit(
+      `routing:navigation:${driver.driverId}`,
+      NAV_RATE_LIMIT,
+      NAV_RATE_WINDOW_MS,
+    );
+    if (!limit.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil(limit.retryAfterMs / 1000)));
+      fail(res, "Too many navigation requests. Try again shortly.", 429);
+      return;
+    }
+
+    const body = req.body as {
+      origin?: { latitude?: unknown; longitude?: unknown };
+      destination?: unknown;
+      waypoints?: unknown[];
+      language?: unknown;
+    };
+
+    const origin = readLatLng(body.origin);
+    const destination = readLatLng(body.destination);
+    const language = body.language === "ar" || body.language === "en"
+      ? body.language
+      : null;
+    if (!origin || !destination || !language) {
+      fail(res, "origin, destination, and language (ar or en) are required");
+      return;
+    }
+
+    const waypoints = Array.isArray(body.waypoints)
+      ? body.waypoints
+          .map((point) => readLatLng(point))
+          .filter((point): point is LatLng => point != null)
+      : [];
+
+    const apiKey = process.env.GOOGLE_ROUTES_API_KEY?.trim();
+    if (!apiKey) {
+      console.error("GOOGLE_ROUTES_API_KEY is not set");
+      sendNavigationError(res, 500, "navigation_unavailable");
+      return;
+    }
+
+    const route = await fetchNavigationRoute(
+      origin,
+      destination,
+      waypoints,
+      language,
+      apiKey,
+    );
+    if (!route) {
+      sendNavigationError(res, 502, "navigation_unavailable");
+      return;
+    }
+
+    ok(res, {
+      points: route.points.map((point) => [point.latitude, point.longitude]),
+      distanceMeters: route.distanceMeters,
+      durationSeconds: route.durationSeconds,
+      steps: route.steps.map((step) => ({
+        maneuver: step.maneuver,
+        instruction: step.instruction,
+        distanceMeters: step.distanceMeters,
+        start: step.start,
+      })),
+    });
+  } catch (error) {
+    console.error("Navigation routing error:", error);
+    sendNavigationError(res, 502, "navigation_unavailable");
+  }
+});

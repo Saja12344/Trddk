@@ -10,7 +10,7 @@ import type {
   PrimaryRole,
   TrddkUser,
 } from "@tardadi/shared";
-import { COLLECTIONS, isAdminPanelRole } from "@tardadi/shared";
+import { COLLECTIONS, isAdminPanelRole, phoneCandidates, requireSaudiMobile } from "@tardadi/shared";
 import { admin, db } from "../firebase";
 import { syncCustomClaims, loadAuthenticatedUser } from "../auth/firebaseAuth";
 
@@ -36,7 +36,8 @@ export async function getUserByEmail(email: string): Promise<TrddkUser | null> {
   const data = doc.data();
   return {
     uid: doc.id,
-    email: data.email as string,
+    email: (data.email as string) ?? "",
+    phone: (data.phone as string | null) ?? null,
     displayName: data.displayName as string,
     primaryRole: data.primaryRole as PrimaryRole,
     status: data.status as AccountStatus,
@@ -69,15 +70,177 @@ export async function createFirebaseAuthUser(
   return record.uid;
 }
 
+function mapUserDoc(
+  uid: string,
+  data: FirebaseFirestore.DocumentData
+): TrddkUser {
+  return {
+    uid,
+    email: (data.email as string) ?? "",
+    phone: (data.phone as string | null) ?? null,
+    displayName: data.displayName as string,
+    primaryRole: data.primaryRole as PrimaryRole,
+    status: data.status as AccountStatus,
+    createdAt: data.createdAt as string | undefined,
+    createdBy: (data.createdBy as string | null) ?? null,
+    lastLoginAt: (data.lastLoginAt as string | null) ?? null,
+    legacyAdminUserId: (data.legacyAdminUserId as string | null) ?? null,
+  };
+}
+
+export async function findFirestoreUsersByPhone(phone: string): Promise<TrddkUser[]> {
+  const candidates = phoneCandidates(phone).slice(0, 10);
+  if (candidates.length === 0) return [];
+  const snap = await db
+    .collection(COLLECTIONS.users)
+    .where("phone", "in", candidates)
+    .limit(10)
+    .get();
+  return snap.docs.map((doc) => mapUserDoc(doc.id, doc.data()));
+}
+
+export async function assertPhoneAvailableInBusiness(
+  phone: string,
+  businessId: string,
+  exceptUid?: string
+): Promise<void> {
+  const normalized = requireSaudiMobile(phone);
+  const uids = new Set<string>(
+    (await findFirestoreUsersByPhone(normalized)).map((user) => user.uid)
+  );
+  try {
+    const authUser = await admin.auth().getUserByPhoneNumber(normalized);
+    uids.add(authUser.uid);
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code !== "auth/user-not-found") throw err;
+  }
+
+  for (const uid of uids) {
+    if (uid === exceptUid) continue;
+    const membership = await db
+      .collection(COLLECTIONS.users)
+      .doc(uid)
+      .collection(COLLECTIONS.memberships)
+      .doc(businessId)
+      .get();
+    if (membership.exists && membership.data()?.status !== "revoked") {
+      throw new Error("رقم الجوال مسجل مسبقاً في هذه الشركة.");
+    }
+  }
+}
+
+export async function storeBeneficiaryPhone(
+  uid: string,
+  phone: string,
+  businessId: string
+): Promise<string> {
+  const normalized = requireSaudiMobile(phone);
+  await assertPhoneAvailableInBusiness(normalized, businessId, uid);
+  try {
+    const authUser = await admin.auth().getUser(uid);
+    if (authUser.phoneNumber !== normalized) {
+      await admin.auth().updateUser(uid, { phoneNumber: normalized });
+    }
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code === "auth/user-not-found") {
+      throw new Error("المستخدم غير موجود.");
+    }
+    if (code === "auth/phone-number-already-exists") {
+      throw new Error("رقم الجوال مرتبط بحساب آخر.");
+    }
+    throw err;
+  }
+
+  const now = nowIso();
+  await db.collection(COLLECTIONS.users).doc(uid).set(
+    { phone: normalized, updatedAt: now },
+    { merge: true }
+  );
+  await db
+    .collection(COLLECTIONS.users)
+    .doc(uid)
+    .collection(COLLECTIONS.memberships)
+    .doc(businessId)
+    .set({ phone: normalized }, { merge: true });
+  return normalized;
+}
+
+async function findBeneficiaryUser(
+  phone: string,
+  email: string
+): Promise<TrddkUser | null> {
+  const byPhone = await findFirestoreUsersByPhone(phone);
+  if (byPhone[0]) return byPhone[0];
+  try {
+    const authUser = await admin.auth().getUserByPhoneNumber(phone);
+    const doc = await db.collection(COLLECTIONS.users).doc(authUser.uid).get();
+    if (doc.exists) return mapUserDoc(doc.id, doc.data()!);
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code !== "auth/user-not-found") throw err;
+  }
+  if (email) return getUserByEmail(email);
+  return null;
+}
+
+async function resolveUidForPhone(
+  phone: string,
+  email: string,
+  displayName: string
+): Promise<string> {
+  try {
+    const byPhone = await admin.auth().getUserByPhoneNumber(phone);
+    const updates: admin.auth.UpdateRequest = {};
+    if (displayName && !byPhone.displayName) updates.displayName = displayName;
+    if (email && !byPhone.email) {
+      updates.email = email;
+      updates.emailVerified = false;
+    }
+    if (Object.keys(updates).length > 0) {
+      await admin.auth().updateUser(byPhone.uid, updates);
+    }
+    return byPhone.uid;
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code !== "auth/user-not-found") throw err;
+  }
+
+  if (email) {
+    try {
+      const byEmail = await admin.auth().getUserByEmail(email);
+      await admin.auth().updateUser(byEmail.uid, {
+        phoneNumber: phone,
+        displayName: byEmail.displayName || displayName,
+      });
+      return byEmail.uid;
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code !== "auth/user-not-found") throw err;
+    }
+  }
+
+  const created = await admin.auth().createUser({
+    phoneNumber: phone,
+    displayName,
+    disabled: false,
+    ...(email ? { email, emailVerified: false } : {}),
+  });
+  return created.uid;
+}
+
+const TRDDK_WEB_API_KEY = "AIzaSyDF72v_3g4nkc7YUIIRkLLmlzPsDBYBHbI";
+
 export async function sendPasswordSetupLink(
   email: string
 ): Promise<void> {
   const normalized = normalizeEmail(email);
 
   const apiKey =
-    process.env.FIREBASE_WEB_API_KEY?.trim() ||
+    process.env.IDENTITY_TOOLKIT_API_KEY?.trim() ||
     process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim() ||
-    "AIzaSyC7xgml87EZjxbXM_1w1okLVT7Wzn8_htQ";
+    TRDDK_WEB_API_KEY;
 
   const res = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
@@ -87,6 +250,7 @@ export async function sendPasswordSetupLink(
       body: JSON.stringify({
         requestType: "PASSWORD_RESET",
         email: normalized,
+        continueUrl: "https://www.tardadi.com/reset-password",
       }),
     }
   );
@@ -102,7 +266,8 @@ export async function sendPasswordSetupLink(
 }
 
 export interface CreateUserOptions {
-  email: string;
+  email?: string;
+  phone?: string | null;
   displayName: string;
   primaryRole: PrimaryRole;
   createdBy: string;
@@ -120,28 +285,38 @@ export interface CreateUserOptions {
 export async function createOrLinkUser(
   options: CreateUserOptions
 ): Promise<{ uid: string; created: boolean }> {
-  const email = normalizeEmail(options.email);
-  if (!EMAIL_RE.test(email)) {
+  const email = options.email?.trim() ? normalizeEmail(options.email) : "";
+  const phone = options.phone?.trim() ? requireSaudiMobile(options.phone) : "";
+  if (!email && !phone) {
+    throw new Error("رقم الجوال أو البريد الإلكتروني مطلوب.");
+  }
+  if (email && !EMAIL_RE.test(email)) {
     throw new Error("البريد الإلكتروني غير صالح.");
   }
+  if (phone && options.businessId) {
+    await assertPhoneAvailableInBusiness(phone, options.businessId);
+  }
 
-  const uid = await createFirebaseAuthUser(email, options.displayName);
+  const uid = phone
+    ? await resolveUidForPhone(phone, email, options.displayName)
+    : await createFirebaseAuthUser(email, options.displayName);
   const userRef = db.collection(COLLECTIONS.users).doc(uid);
   const existing = await userRef.get();
   const created = !existing.exists;
   const existingData = existing.exists ? existing.data()! : null;
   const existingPrimaryRole = existingData?.primaryRole as PrimaryRole | undefined;
-  const preserveAdminIdentity =
+  const preserveIdentity =
     !created &&
     existingPrimaryRole !== undefined &&
-    isAdminPanelRole(existingPrimaryRole);
+    (isAdminPanelRole(existingPrimaryRole) || existingPrimaryRole === "driver");
 
   const userPayload: Record<string, unknown> = {
-    email,
-    displayName: options.displayName,
+    displayName: existingData?.displayName || options.displayName,
     updatedAt: nowIso(),
     legacyAdminUserId: options.legacyAdminUserId ?? null,
   };
+  if (email) userPayload.email = email;
+  if (phone) userPayload.phone = phone;
 
   if (created) {
     userPayload.primaryRole = options.primaryRole;
@@ -149,7 +324,7 @@ export async function createOrLinkUser(
     userPayload.createdAt = nowIso();
     userPayload.createdBy = options.createdBy;
     userPayload.hasPassword = false;
-  } else if (!preserveAdminIdentity) {
+  } else if (!preserveIdentity) {
     userPayload.primaryRole = options.primaryRole;
   }
 
@@ -173,13 +348,14 @@ export async function createOrLinkUser(
       (existingMembershipRole === "business_admin" ||
         existingMembershipRole === "business_viewer");
     const grantPassengerAccess = !isPanelRole;
+    const inviteAsActivePanel = isPanelRole;
 
     await upsertMembership(uid, options.businessId, {
       role: preserveMembershipRole
         ? existingMembershipRole!
         : options.membershipRole,
       status:
-        existingMembershipData?.status === "active"
+        existingMembershipData?.status === "active" || inviteAsActivePanel
           ? "active"
           : ((existingMembershipData?.status as AccountStatus | undefined) ??
             "pending"),
@@ -189,6 +365,7 @@ export async function createOrLinkUser(
       employeeNumber: options.employeeNumber ?? null,
       department: options.department ?? null,
       driverId: options.driverId ?? null,
+      ...(phone ? { phone } : {}),
       ...(grantPassengerAccess
         ? { passengerAccess: true }
         : options.passengerAccess !== undefined
@@ -283,11 +460,13 @@ export async function provisionDriverEmailAccount(
   options: CreateUserOptions
 ): Promise<{ setupEmailSent: boolean }> {
   await createOrLinkUser(options);
-  const hasPassword = await userHasPassword(options.email);
+  const email = options.email?.trim();
+  if (!email) return { setupEmailSent: false };
+  const hasPassword = await userHasPassword(email);
   if (hasPassword) {
     return { setupEmailSent: false };
   }
-  await sendPasswordSetupLink(normalizeEmail(options.email));
+  await sendPasswordSetupLink(normalizeEmail(email));
   return { setupEmailSent: true };
 }
 
@@ -328,8 +507,20 @@ export async function inviteUser(
   inviterUid: string,
   request: InviteUserRequest
 ): Promise<{ uid: string; created: boolean }> {
+  const email = request.email?.trim() ? normalizeEmail(request.email) : "";
+  const phone = request.phone?.trim() ? requireSaudiMobile(request.phone) : "";
+  const beneficiary =
+    request.primaryRole === "employee" || request.membershipRole === "employee";
+  if (beneficiary && !phone) {
+    throw new Error("رقم الجوال مطلوب.");
+  }
+  if (!beneficiary && !email) {
+    throw new Error("البريد الإلكتروني مطلوب.");
+  }
+
   const result = await createOrLinkUser({
-    email: request.email,
+    email,
+    phone,
     displayName: request.displayName,
     primaryRole: request.primaryRole,
     createdBy: inviterUid,
@@ -340,9 +531,34 @@ export async function inviteUser(
     source: "invite",
   });
 
-  const hasPassword = await userHasPassword(request.email);
-  if (!hasPassword) {
-    await sendPasswordSetupLink(normalizeEmail(request.email));
+  if (
+    request.businessId &&
+    email &&
+    (request.primaryRole === "business_admin" ||
+      request.membershipRole === "business_admin")
+  ) {
+    await db.collection(COLLECTIONS.businesses).doc(request.businessId).set(
+      {
+        adminEmail: email,
+        adminUserId: result.uid,
+        status: "active",
+        updatedAt: nowIso(),
+      },
+      { merge: true }
+    );
+  }
+
+  if (!email) {
+    return result;
+  }
+
+  try {
+    const hasPassword = await userHasPassword(email);
+    if (!hasPassword) {
+      await sendPasswordSetupLink(email);
+    }
+  } catch (error) {
+    console.error("invite password setup email failed", error);
   }
   return result;
 }
@@ -354,6 +570,14 @@ export async function recordLogin(uid: string): Promise<void> {
   );
 }
 
+const PHONE_HEADERS = [
+  "phone",
+  "mobile",
+  "mobile number",
+  "الجوال",
+  "رقم الجوال",
+  "رقم الجوال *",
+];
 const NAME_HEADERS = ["الاسم", "اسم الموظف", "name", "employee name", "display name"];
 const EMAIL_HEADERS = [
   "الإيميل",
@@ -450,6 +674,7 @@ export function parseBulkImportRows(
   defaultRole: MembershipRole = "employee"
 ): { rows: BulkImportRow[]; preview: BulkImportPreview } {
   const nameIdx = detectColumn(headers, NAME_HEADERS);
+  const phoneIdx = detectColumn(headers, PHONE_HEADERS);
   const emailIdx = detectColumn(headers, EMAIL_HEADERS);
   const empIdx = detectColumn(headers, EMP_ID_HEADERS);
   const roleIdx = detectColumn(headers, ROLE_HEADERS);
@@ -457,8 +682,9 @@ export function parseBulkImportRows(
 
   const errors: BulkImportPreview["errors"] = [];
   const parsed: BulkImportRow[] = [];
-  const seenEmails = new Set<string>();
+  const seenPhones = new Set<string>();
   let invalidEmails = 0;
+  let invalidPhones = 0;
   let duplicatesInFile = 0;
   let missingRequired = 0;
   let invalidRoles = 0;
@@ -466,25 +692,34 @@ export function parseBulkImportRows(
   rows.forEach((cells, index) => {
     const rowNumber = index + 2;
     const displayName = nameIdx >= 0 ? (cells[nameIdx] ?? "").trim() : "";
+    const phoneRaw = phoneIdx >= 0 ? (cells[phoneIdx] ?? "").trim() : "";
     const emailRaw = emailIdx >= 0 ? (cells[emailIdx] ?? "").trim() : "";
-    const email = normalizeEmail(emailRaw);
+    const email = emailRaw ? normalizeEmail(emailRaw) : "";
 
-    if (!displayName || !email) {
+    if (!displayName || !phoneRaw) {
       missingRequired += 1;
-      errors.push({ rowNumber, message: "الاسم والإيميل مطلوبان." });
+      errors.push({ rowNumber, message: "الاسم ورقم الجوال مطلوبان." });
       return;
     }
-    if (!EMAIL_RE.test(email)) {
+    let phone = "";
+    try {
+      phone = requireSaudiMobile(phoneRaw);
+    } catch {
+      invalidPhones += 1;
+      errors.push({ rowNumber, message: "رقم جوال غير صالح." });
+      return;
+    }
+    if (email && !EMAIL_RE.test(email)) {
       invalidEmails += 1;
       errors.push({ rowNumber, message: "إيميل غير صالح." });
       return;
     }
-    if (seenEmails.has(email)) {
+    if (seenPhones.has(phone)) {
       duplicatesInFile += 1;
-      errors.push({ rowNumber, message: "إيميل مكرر في الملف." });
+      errors.push({ rowNumber, message: "رقم الجوال مكرر في الملف." });
       return;
     }
-    seenEmails.add(email);
+    seenPhones.add(phone);
 
     const roleRaw = roleIdx >= 0 ? (cells[roleIdx] ?? "").trim() : "";
     const parsedRole = parseImportRole(roleRaw);
@@ -499,6 +734,7 @@ export function parseBulkImportRows(
       rowNumber,
       displayName,
       email,
+      phone,
       employeeNumber: empIdx >= 0 ? cells[empIdx]?.trim() || null : null,
       role,
       department: deptIdx >= 0 ? cells[deptIdx]?.trim() || null : null,
@@ -523,6 +759,7 @@ export function parseBulkImportRows(
       duplicatesInFile,
       existingUsers: 0,
       missingRequired,
+      invalidPhones,
       invalidRoles,
       preview: previewRows,
       errors,
@@ -538,7 +775,7 @@ export async function enrichBulkImportPreview(
   const previewRows: BulkImportPreviewRow[] = [];
 
   for (const row of parsed) {
-    const existing = await getUserByEmail(row.email);
+    const existing = await findBeneficiaryUser(row.phone, row.email);
     let existingInCompany = false;
     let action: BulkImportPreviewRow["action"] = "import";
     let message: string | undefined;
@@ -588,6 +825,7 @@ export async function enrichBulkImportPreview(
     duplicatesInFile: 0,
     existingUsers,
     missingRequired: 0,
+    invalidPhones: 0,
     invalidRoles,
     preview: previewRows,
     errors: [],
@@ -610,7 +848,7 @@ export async function executeBulkImport(
 
   for (const row of rows) {
     try {
-      const existing = await getUserByEmail(row.email);
+      const existing = await findBeneficiaryUser(row.phone, row.email);
       const membershipRole = row.role ?? "employee";
       const passengerAccess = row.passengerAccess ?? true;
       const driverAccess = row.driverAccess ?? membershipRole === "driver";
@@ -632,6 +870,7 @@ export async function executeBulkImport(
             result.skipped += 1;
             result.details.push({
               email: row.email,
+              phone: row.phone,
               status: "skipped",
               message: "عضوية موجودة مسبقاً.",
             });
@@ -643,11 +882,13 @@ export async function executeBulkImport(
             role: driverAccess && !passengerAccess ? "driver" : membershipRole,
             passengerAccess,
             driverAccess,
+            phone: row.phone,
             status: current.status,
             source: current.source ?? "bulk_import",
           });
+          await storeBeneficiaryPhone(existing.uid, row.phone, businessId);
           result.updated += 1;
-          result.details.push({ email: row.email, status: "updated" });
+          result.details.push({ email: row.email, phone: row.phone, status: "updated" });
           continue;
         }
 
@@ -659,12 +900,17 @@ export async function executeBulkImport(
           invitedBy: inviterUid,
           employeeNumber: row.employeeNumber ?? null,
           department: row.department ?? null,
+          phone: row.phone,
           passengerAccess,
           driverAccess,
         });
-        await sendPasswordSetupLink(row.email);
+        await storeBeneficiaryPhone(existing.uid, row.phone, businessId);
+        if (row.email) {
+          const hasPassword = await userHasPassword(row.email);
+          if (!hasPassword) await sendPasswordSetupLink(row.email);
+        }
         result.linked += 1;
-        result.details.push({ email: row.email, status: "linked" });
+        result.details.push({ email: row.email, phone: row.phone, status: "linked" });
         continue;
       }
 
@@ -672,6 +918,7 @@ export async function executeBulkImport(
         driverAccess && !passengerAccess ? "driver" : "employee";
       const { created } = await createOrLinkUser({
         email: row.email,
+        phone: row.phone,
         displayName: row.displayName,
         primaryRole,
         createdBy: inviterUid,
@@ -684,18 +931,22 @@ export async function executeBulkImport(
         driverAccess,
       });
 
-      await sendPasswordSetupLink(row.email);
+      if (row.email) {
+        const hasPassword = await userHasPassword(row.email);
+        if (!hasPassword) await sendPasswordSetupLink(row.email);
+      }
       if (created) {
         result.created += 1;
-        result.details.push({ email: row.email, status: "created" });
+        result.details.push({ email: row.email, phone: row.phone, status: "created" });
       } else {
         result.linked += 1;
-        result.details.push({ email: row.email, status: "linked" });
+        result.details.push({ email: row.email, phone: row.phone, status: "linked" });
       }
     } catch (err) {
       result.failed += 1;
       result.details.push({
         email: row.email,
+        phone: row.phone,
         status: "failed",
         message: (err as Error).message,
       });

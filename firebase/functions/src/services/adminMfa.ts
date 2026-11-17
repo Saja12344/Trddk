@@ -1,5 +1,5 @@
 import { createHash, randomInt } from "crypto";
-import type { AdminPanelRole } from "@tardadi/shared";
+import type { AdminPanelRole, AuthenticatedUser } from "@tardadi/shared";
 import { COLLECTIONS, isAdminPanelRole } from "@tardadi/shared";
 import { db } from "../firebase";
 import { getJwtSecret, signJwt, verifyJwt } from "../auth/crypto";
@@ -10,7 +10,12 @@ import {
   primaryBusinessId,
   resolveUserFromIdToken,
 } from "../auth/firebaseAuth";
-import { normalizeEmail, recordLogin } from "./users";
+import {
+  createOrLinkUser,
+  getUserByEmail,
+  normalizeEmail,
+  recordLogin,
+} from "./users";
 
 const OTP_TTL_MS = 8 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -101,6 +106,86 @@ export function parseAdminSessionToken(token: string): {
   };
 }
 
+async function findBusinessIdForManagerEmail(email: string): Promise<string | null> {
+  const businesses = await db.collection(COLLECTIONS.businesses).get();
+  for (const doc of businesses.docs) {
+    const data = doc.data();
+    const candidates = [data.adminEmail, data.managerEmail, data.email];
+    if (
+      candidates.some(
+        (value) => typeof value === "string" && normalizeEmail(value) === email
+      )
+    ) {
+      return doc.id;
+    }
+  }
+
+  const userSnap = await db
+    .collection(COLLECTIONS.users)
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+  if (!userSnap.empty) {
+    const memberships = await userSnap.docs[0].ref
+      .collection(COLLECTIONS.memberships)
+      .get();
+    const adminMembership = memberships.docs.find((doc) => {
+      const role = doc.data().role as string | undefined;
+      const status = doc.data().status as string | undefined;
+      return (
+        (role === "business_admin" || role === "business_viewer") &&
+        status !== "revoked" &&
+        status !== "suspended"
+      );
+    });
+    if (adminMembership) return adminMembership.id;
+  }
+
+  const admins = await db.collection(COLLECTIONS.adminUsers).get();
+  for (const doc of admins.docs) {
+    const data = doc.data();
+    const adminEmail =
+      typeof data.email === "string" ? normalizeEmail(data.email) : "";
+    if (adminEmail === email && typeof data.businessId === "string") {
+      return data.businessId;
+    }
+  }
+  return null;
+}
+
+export async function autoProvisionCompanyManager(
+  idToken: string
+): Promise<AuthenticatedUser | null> {
+  const { verifyFirebaseIdToken, loadAuthenticatedUser } = await import(
+    "../auth/firebaseAuth"
+  );
+  const decoded = await verifyFirebaseIdToken(idToken);
+  const email = decoded?.email ? normalizeEmail(decoded.email) : "";
+  if (!decoded?.uid || !email) return null;
+
+  const existing = await getUserByEmail(email);
+  const businessId = await findBusinessIdForManagerEmail(email);
+  if (!businessId && !existing) return null;
+
+  await createOrLinkUser({
+    email,
+    displayName:
+      decoded.name ||
+      existing?.displayName ||
+      email.split("@")[0],
+    primaryRole: existing?.primaryRole ?? "business_admin",
+    createdBy: "system-auto-provision",
+    businessId: businessId,
+    membershipRole:
+      existing?.primaryRole === "business_viewer"
+        ? "business_viewer"
+        : "business_admin",
+    source: "invite",
+  });
+
+  return loadAuthenticatedUser(decoded.uid);
+}
+
 export async function beginAdminMfaChallenge(idToken: string): Promise<{
   challengeToken: string;
   email: string;
@@ -112,7 +197,8 @@ export async function beginAdminMfaChallenge(idToken: string): Promise<{
     throw new Error("Invalid credentials.");
   }
 
-  const user = await resolveUserFromIdToken(idToken);
+  const user = await resolveUserFromIdToken(idToken)
+    ?? (await autoProvisionCompanyManager(idToken));
   if (!user) {
     throw new Error("Admin account not provisioned.");
   }
@@ -124,7 +210,27 @@ export async function beginAdminMfaChallenge(idToken: string): Promise<{
   }
 
   const email = normalizeEmail(user.email);
-  const businessId = primaryBusinessId(user);
+  let businessId = primaryBusinessId(user);
+  if (
+    (user.primaryRole === "business_admin" ||
+      user.primaryRole === "business_viewer") &&
+    !businessId
+  ) {
+    businessId = await findBusinessIdForManagerEmail(email);
+    if (businessId) {
+      await createOrLinkUser({
+        email,
+        displayName: user.displayName || email.split("@")[0],
+        primaryRole: user.primaryRole,
+        createdBy: "system-auto-provision",
+        businessId,
+        membershipRole: user.primaryRole,
+        source: "invite",
+      });
+      const linked = await loadAuthenticatedUser(user.uid);
+      businessId = linked ? primaryBusinessId(linked) : businessId;
+    }
+  }
 
   if (
     (user.primaryRole === "business_admin" ||
@@ -136,7 +242,8 @@ export async function beginAdminMfaChallenge(idToken: string): Promise<{
 
   if (businessId) {
     const businessDoc = await db.collection(COLLECTIONS.businesses).doc(businessId).get();
-    if (!businessDoc.exists || businessDoc.data()?.status !== "active") {
+    const status = businessDoc.data()?.status as string | undefined;
+    if (!businessDoc.exists || (status && status !== "active")) {
       throw new Error("Invalid credentials.");
     }
   }

@@ -1,11 +1,12 @@
 import type { AccountStatus, BusinessMembership, MembershipRole } from "@tardadi/shared";
-import { COLLECTIONS } from "@tardadi/shared";
+import { COLLECTIONS, requireSaudiMobile } from "@tardadi/shared";
 import { admin, db } from "../firebase";
-import { upsertMembership } from "./users";
+import { upsertMembership, storeBeneficiaryPhone } from "./users";
 
 export interface BusinessEmployeeRecord {
   uid: string;
   email: string;
+  phone: string | null;
   displayName: string;
   status: AccountStatus;
   membership: BusinessMembership;
@@ -88,7 +89,11 @@ export async function listBusinessEmployees(
 
     employees.push({
       uid,
-      email: userData.email as string,
+      email: (userData.email as string) ?? "",
+      phone:
+        (userData.phone as string | undefined) ??
+        (membership.phone as string | undefined) ??
+        null,
       displayName: userData.displayName as string,
       status: (userData.status as AccountStatus) ?? "pending",
       membership,
@@ -110,6 +115,7 @@ export async function updateEmployeeMembership(
   uid: string,
   patch: {
     displayName?: string;
+    phone?: string;
     passengerAccess?: boolean;
     driverAccess?: boolean;
     status?: AccountStatus;
@@ -152,6 +158,10 @@ export async function updateEmployeeMembership(
     throw new Error("Employee not found in this company.");
   }
 
+  if (patch.phone?.trim()) {
+    await storeBeneficiaryPhone(uid, patch.phone, businessId);
+  }
+
   const current = membershipDoc.data() as Omit<BusinessMembership, "businessId">;
   const passengerAccess = patch.passengerAccess ?? current.passengerAccess;
   const driverAccess = patch.driverAccess ?? current.driverAccess;
@@ -164,6 +174,7 @@ export async function updateEmployeeMembership(
     role,
     passengerAccess,
     driverAccess,
+    ...(patch.phone?.trim() ? { phone: requireSaudiMobile(patch.phone) } : {}),
     status: patch.membershipStatus ?? current.status,
   });
 }

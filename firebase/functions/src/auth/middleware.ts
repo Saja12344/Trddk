@@ -54,14 +54,57 @@ export function parseAdminAuth(req: Request): AdminAuthContext | null {
   };
 }
 
+async function parseFirebaseAdminAuth(
+  req: Request
+): Promise<AdminAuthContext | null> {
+  const token = extractBearer(req);
+  if (!token || token.split(".").length !== 3) return null;
+  try {
+    const { verifyFirebaseIdToken, loadAuthenticatedUser, primaryBusinessId } =
+      await import("./firebaseAuth");
+    const { autoProvisionCompanyManager } = await import(
+      "../services/adminMfa"
+    );
+    const { isAdminPanelRole: isPanel } = await import("@tardadi/shared");
+    const decoded = await verifyFirebaseIdToken(token);
+    if (!decoded?.uid) return null;
+    let user = await loadAuthenticatedUser(decoded.uid);
+    if (!user) {
+      user = await autoProvisionCompanyManager(token);
+    }
+    if (!user || !isPanel(user.primaryRole)) return null;
+    if (user.status === "suspended" || user.status === "revoked") return null;
+    return {
+      userId: user.uid,
+      name: user.displayName,
+      phone: user.email,
+      role: user.primaryRole as AdminRole,
+      businessId: primaryBusinessId(user),
+      firebaseUser: { uid: user.uid, primaryRole: user.primaryRole },
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Attach adminAuth to request when a valid JWT is present. */
 export function attachAdminAuth(
   req: Request,
   _res: Response,
   next: NextFunction
 ): void {
-  req.adminAuth = parseAdminAuth(req);
-  next();
+  const auth = parseAdminAuth(req);
+  if (auth) {
+    req.adminAuth = auth;
+    next();
+    return;
+  }
+  void parseFirebaseAdminAuth(req)
+    .then((firebaseAuth) => {
+      req.adminAuth = firebaseAuth;
+      next();
+    })
+    .catch((error) => next(error));
 }
 
 /** Require a valid admin JWT. */

@@ -4,15 +4,17 @@ import { admin, db } from "../firebase";
 import { syncCustomClaims, loadAuthenticatedUser } from "../auth/firebaseAuth";
 import {
   createOrLinkUser,
-  getUserByEmail,
   normalizeEmail,
   sendPasswordSetupLink,
   upsertMembership,
-  userHasPassword,
 } from "./users";
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 export async function loadCompanyManagerSummary(
@@ -95,18 +97,30 @@ export async function loadCompanyManagerSummary(
     }
   }
 
+  const savedEmail =
+    optionalString(businessData.managerEmail) ||
+    optionalString(businessData.adminEmail);
+  const savedName =
+    optionalString(businessData.managerName) ||
+    optionalString(businessData.adminName);
+  const savedPhone =
+    optionalString(businessData.managerPhone) ||
+    optionalString(businessData.adminPhone);
+
   return {
     uid: null,
-    name: null,
-    email: null,
-    phone: null,
+    name: savedName,
+    email: savedEmail,
+    phone: savedPhone,
     role: "business_admin",
-    accountStatus: "incomplete",
-    invitationStatus: "incomplete",
+    accountStatus: savedEmail ? "pending" : "incomplete",
+    invitationStatus: savedEmail ? "invitation_pending" : "incomplete",
     emailVerified: false,
     mfaEnabled: true,
     lastLoginAt: null,
-    incompleteReason: "No company manager assigned.",
+    incompleteReason: savedEmail
+      ? null
+      : "أضف بريد المدير ثم أرسل الدعوة مرة واحدة.",
   };
 }
 
@@ -120,7 +134,6 @@ export async function provisionCompanyManager(
   }
 ): Promise<{ uid: string; created: boolean }> {
   const email = normalizeEmail(options.adminEmail);
-  const existing = await getUserByEmail(email);
 
   const result = await createOrLinkUser({
     email,
@@ -134,7 +147,7 @@ export async function provisionCompanyManager(
 
   await upsertMembership(result.uid, businessId, {
     role: "business_admin",
-    status: "pending",
+    status: "active",
     joinedAt: nowIso(),
     source: "manual",
     invitedBy: options.inviterUid,
@@ -145,23 +158,67 @@ export async function provisionCompanyManager(
   const loaded = await loadAuthenticatedUser(result.uid);
   if (loaded) await syncCustomClaims(loaded);
 
-  const hasPassword = await userHasPassword(email);
-  if (!hasPassword) {
-    await sendPasswordSetupLink(email);
-  }
-
   await db.collection(COLLECTIONS.businesses).doc(businessId).set(
     {
       managerUid: result.uid,
+      managerName: options.adminName.trim(),
       managerEmail: email,
+      adminEmail: email,
+      adminName: options.adminName.trim(),
       managerPhone: options.adminPhone?.trim() || null,
       managerInvitationStatus: "invitation_pending" as ManagerInvitationStatus,
+      status: "active",
       updatedAt: nowIso(),
     },
     { merge: true }
   );
 
   return result;
+}
+
+export const MANAGER_INVITE_COOLDOWN_MS = 60_000;
+
+export async function sendCompanyManagerInvite(
+  businessId: string,
+  email: string
+): Promise<{ sent: true; retryAfterSec: number }> {
+  const normalized = normalizeEmail(email);
+  const ref = db.collection(COLLECTIONS.businesses).doc(businessId);
+  const doc = await ref.get();
+  if (!doc.exists) {
+    throw new Error("لم نجد هذه الشركة.");
+  }
+
+  const lastSentAt = doc.data()?.managerInviteSentAt as string | undefined;
+  if (lastSentAt) {
+    const elapsed = Date.now() - Date.parse(lastSentAt);
+    if (Number.isFinite(elapsed) && elapsed < MANAGER_INVITE_COOLDOWN_MS) {
+      const retryAfterSec = Math.max(
+        1,
+        Math.ceil((MANAGER_INVITE_COOLDOWN_MS - elapsed) / 1000)
+      );
+      const error = new Error(
+        `انتظر ${retryAfterSec} ثانية قبل إعادة إرسال الدعوة.`
+      ) as Error & { status: number };
+      error.status = 429;
+      throw error;
+    }
+  }
+
+  await sendPasswordSetupLink(normalized);
+  await ref.set(
+    {
+      managerInviteSentAt: nowIso(),
+      managerInvitationStatus: "invitation_pending" as ManagerInvitationStatus,
+      status: "active",
+      adminEmail: normalized,
+      managerEmail: normalized,
+      updatedAt: nowIso(),
+    },
+    { merge: true }
+  );
+
+  return { sent: true, retryAfterSec: MANAGER_INVITE_COOLDOWN_MS / 1000 };
 }
 
 export async function replaceCompanyManager(

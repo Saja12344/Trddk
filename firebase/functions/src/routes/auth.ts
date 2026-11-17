@@ -9,6 +9,10 @@ import {
   driverLoginDecision,
 } from "../auth/driverAccess";
 import {
+  driverReviewLoginDecision,
+  driverReviewSession,
+} from "../services/driverReview";
+import {
   reviewLoginDecision,
   signPassengerReviewToken,
 } from "../services/passengerReview";
@@ -136,7 +140,7 @@ router.post("/driver-start-login", async (req, res) => {
       fail(res, message, 429);
       return;
     }
-    if (/اكتب رقم الجوال/.test(message)) {
+    if (/اكتب رقم الجوال/.test(message) || /تعذّر إرسال رمز التحقق/.test(message)) {
       fail(res, message, 400);
       return;
     }
@@ -179,6 +183,33 @@ router.post("/driver-login", async (req, res) => {
     ok(res, session);
   } catch (error) {
     failAuth(res, error);
+  }
+});
+
+router.post("/driver-review-login", async (req, res) => {
+  try {
+    const phone = String(req.body?.phone ?? "");
+    const code = String(req.body?.code ?? "");
+    const normalized = normalizePhone(phone);
+    const rate = consumeRateLimit(
+      `driver-review:${normalized || "invalid"}`,
+      12,
+      15 * 60 * 1000
+    );
+    if (!rate.allowed) {
+      fail(res, "محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.", 429);
+      return;
+    }
+
+    const decision = driverReviewLoginDecision(phone, code);
+    if (!decision.ok) {
+      fail(res, "رمز التحقق غير صحيح.", 401);
+      return;
+    }
+
+    ok(res, driverReviewSession(decision.phone));
+  } catch (error) {
+    fail(res, (error as Error).message, 400);
   }
 });
 
@@ -310,6 +341,71 @@ router.post("/app-send-password-setup", async (req, res) => {
   }
 });
 
+router.post("/passenger-start-phone-login", async (req, res) => {
+  try {
+    const { phone } = req.body as { phone?: string };
+    if (!phone?.trim()) {
+      fail(res, "اكتب رقم الجوال.");
+      return;
+    }
+    if (!loginRateAllowed(res, "passenger-start-phone", clientRateKey(req))) return;
+    const { sendPassengerPhoneOtp } = await import("../services/passengerPhoneOtp");
+    await sendPassengerPhoneOtp(phone);
+    ok(res, { sent: true });
+  } catch (error) {
+    const message = (error as Error).message || "";
+    if (/محاولات كثيرة/.test(message)) {
+      fail(res, message, 429);
+      return;
+    }
+    if (/اكتب رقم الجوال/.test(message) || /تعذّر إرسال رمز التحقق/.test(message)) {
+      fail(res, message, 400);
+      return;
+    }
+    ok(res, { sent: true });
+  }
+});
+
+router.post("/passenger-verify-phone-otp", async (req, res) => {
+  try {
+    const { phone, code } = req.body as { phone?: string; code?: string };
+    if (!phone?.trim() || !code?.trim()) {
+      fail(res, "أدخل رقم الجوال ورمز التحقق.");
+      return;
+    }
+    if (!loginRateAllowed(res, "passenger-verify-phone", clientRateKey(req))) return;
+    const { verifyPassengerPhoneOtp } = await import("../services/passengerPhoneOtp");
+    ok(res, await verifyPassengerPhoneOtp(phone, code));
+  } catch (error) {
+    const message = (error as Error).message || "";
+    const status = /محاولات كثيرة/.test(message) ? 429 : 401;
+    fail(res, message, status);
+  }
+});
+
+router.post("/passenger-phone-login", async (req, res) => {
+  try {
+    if (!loginRateAllowed(res, "passenger-phone-login", clientRateKey(req))) return;
+    const { idToken } = req.body as { idToken?: string };
+    if (!idToken?.trim()) {
+      fail(res, "Invalid request.", 401);
+      return;
+    }
+    const { verifyFirebaseIdToken } = await import("../auth/firebaseAuth");
+    const decoded = await verifyFirebaseIdToken(idToken);
+    const phone = decoded?.phone_number;
+    if (!decoded?.uid || !phone) {
+      fail(res, "Phone number is not registered. Contact your employer.", 401);
+      return;
+    }
+    const { listPassengerMembershipsByPhone } = await import("../services/passengerSession");
+    const result = await listPassengerMembershipsByPhone(decoded.uid, phone);
+    ok(res, result);
+  } catch (error) {
+    failAuth(res, error);
+  }
+});
+
 router.post("/passenger-business-session", async (req, res) => {
   try {
     const { verificationToken, businessId } = req.body as {
@@ -339,13 +435,15 @@ router.post("/passenger-business-session", async (req, res) => {
     const sessionToken = signPassengerSessionToken(
       parsed.uid,
       parsed.email,
-      businessId
+      businessId,
+      parsed.phone
     );
     ok(res, {
       sessionToken,
       businessId,
       businessName: (businessDoc.data()?.name as string) ?? businessId,
       email: parsed.email,
+      phone: parsed.phone,
     });
   } catch (error) {
     fail(res, (error as Error).message, 401);

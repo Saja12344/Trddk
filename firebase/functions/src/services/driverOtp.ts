@@ -5,11 +5,22 @@ import { driverStartDelivery } from "../auth/driverAccess";
 import { consumeRateLimit } from "../auth/rateLimit";
 import { sendSms } from "../auth/sms";
 import { loadDriverSessionByPhone } from "./driverSession";
+import { isDriverStoreReviewPhone } from "./driverReview";
 import { isStoreReviewPhone } from "./passengerReview";
 
 const OTP_TTL_MS = 8 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_ATTEMPTS = 5;
+
+export const SMS_PROVIDER_MISSING = "تعذّر إرسال رمز التحقق.";
+
+export function smsProviderConfigured(): boolean {
+  return Boolean(
+    process.env.TAQNYAT_API_KEY?.trim() ||
+      (process.env.MSEGAT_API_KEY?.trim() && process.env.MSEGAT_USER?.trim()) ||
+      process.env.SMS_WEBHOOK_URL?.trim()
+  );
+}
 
 function hashOtp(code: string, salt: string): string {
   return createHash("sha256").update(`${salt}:${code}`).digest("hex");
@@ -33,8 +44,14 @@ export async function sendDriverPhoneOtp(
     throw new Error("محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.");
   }
 
+  const reviewPhone =
+    isStoreReviewPhone(normalized) || isDriverStoreReviewPhone(normalized);
+  if (!reviewPhone && !smsProviderConfigured()) {
+    throw new Error(SMS_PROVIDER_MISSING);
+  }
+
   let registeredActiveAssigned = false;
-  if (!isStoreReviewPhone(normalized)) {
+  if (!reviewPhone) {
     try {
       await loadDriverSessionByPhone(orgId, phone, normalizePhone);
       registeredActiveAssigned = true;

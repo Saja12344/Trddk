@@ -25,7 +25,19 @@ router.post(
       const auth = req.adminAuth!;
       const body = req.body as InviteUserRequest;
 
-      if (!body.email || !body.displayName || !body.primaryRole) {
+      if (!body.displayName || !body.primaryRole) {
+        fail(res, "الاسم والدور مطلوبان.");
+        return;
+      }
+
+      const beneficiary =
+        body.primaryRole === "employee" || body.membershipRole === "employee";
+      if (beneficiary) {
+        if (!body.phone?.trim()) {
+          fail(res, "رقم الجوال مطلوب.");
+          return;
+        }
+      } else if (!body.email?.trim()) {
         fail(res, "الاسم والإيميل والدور مطلوبة.");
         return;
       }

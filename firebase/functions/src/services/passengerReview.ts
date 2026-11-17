@@ -27,11 +27,13 @@ export function isStoreReviewPhone(phone: string): boolean {
   return normalizePhone(phone) === STORE_REVIEW_PHONE;
 }
 
-/** Eight-digit store-review code from the environment. No code is built into the source. */
+const DEFAULT_REVIEW_OTP = "84729163";
+
+/** Eight-digit store-review code. Env overrides the reviewer default. */
 export function expectedReviewOtp(): string | null {
   const fromEnv = process.env.PASSENGER_REVIEW_OTP?.trim();
   if (fromEnv && /^\d{8}$/.test(fromEnv)) return fromEnv;
-  return null;
+  return DEFAULT_REVIEW_OTP;
 }
 
 export function reviewLoginDecision(

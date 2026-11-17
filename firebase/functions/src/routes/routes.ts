@@ -10,6 +10,7 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import { withTranslatedNames } from "../services/translate";
 import {
   isPublicPassengerRoute,
   omitReviewPrivateFields,
@@ -107,15 +108,17 @@ router.get("/", optionalAdminWithPermission("routes:read"), async (req, res) => 
       const routes = await mapAcrossBusinesses(db, businessIds, listRoutesForBusiness);
       ok(
         res,
-        routes
-          .filter((route) =>
-            isPublicPassengerRoute(route as { status?: string; accessMode?: string })
-          )
-          .map((route) =>
-            review
-              ? omitReviewPrivateFields(route as Record<string, unknown>)
-              : route
-          )
+        await withTranslatedNames(
+          routes
+            .filter((route) =>
+              isPublicPassengerRoute(route as { status?: string; accessMode?: string })
+            )
+            .map((route) =>
+              review
+                ? omitReviewPrivateFields(route as Record<string, unknown>)
+                : (route as Record<string, unknown>)
+            )
+        )
       );
       return;
     }
@@ -127,7 +130,7 @@ router.get("/", optionalAdminWithPermission("routes:read"), async (req, res) => 
       businessId
     );
     const routes = await mapAcrossBusinesses(db, businessIds, listRoutesForBusiness);
-    ok(res, routes);
+    ok(res, await withTranslatedNames(routes as Record<string, unknown>[]));
   } catch (error) {
     const err = error as Error & { status?: number };
     fail(res, err.message, err.status ?? 500);
@@ -218,9 +221,12 @@ router.get("/:routeId/live", async (req, res) => {
       intermediateStopsCount: stops.length,
     });
 
+    const [translatedRoute] = await withTranslatedNames([
+      (review ? omitReviewPrivateFields(routePayload) : routePayload) as Record<string, unknown>,
+    ]);
     ok(res, {
-      route: review ? omitReviewPrivateFields(routePayload) : routePayload,
-      stops,
+      route: translatedRoute,
+      stops: await withTranslatedNames(stops as Record<string, unknown>[]),
       buses,
       liveBusCount,
       activeBusCount: tripsSnapshot.size,
@@ -276,9 +282,12 @@ router.get("/:routeId", optionalAdminWithPermission("routes:read"), async (req, 
       intermediateStopsCount: intermediateStops,
     });
 
+    const [translatedRoute] = await withTranslatedNames([
+      (review ? omitReviewPrivateFields(routePayload) : routePayload) as Record<string, unknown>,
+    ]);
     ok(res, {
-      route: review ? omitReviewPrivateFields(routePayload) : routePayload,
-      stops,
+      route: translatedRoute,
+      stops: await withTranslatedNames(stops as Record<string, unknown>[]),
     });
   } catch (error) {
     const err = error as Error & { status?: number };
