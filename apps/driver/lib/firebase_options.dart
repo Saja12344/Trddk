@@ -59,10 +59,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC7xgml87EZjxbXM_1w1okLVT7Wzn8_htQ',
-    appId: '1:815276520530:ios:fc62e519d22a82a8351b8b',
+    appId: '1:815276520530:ios:7a6b76c25d9f195a351b8b',
     messagingSenderId: '815276520530',
     projectId: 'trddk-54c45',
     storageBucket: 'trddk-54c45.firebasestorage.app',
-    iosBundleId: 'com.tardadi.tardadiDriver',
+    iosBundleId: 'com.tardadi.tardadi.Driver',
   );
 }
