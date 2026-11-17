@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,11 +7,35 @@ import 'package:tardadi_core/tardadi_core.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/driver_api.dart';
+import '../services/driver_prefs.dart';
 import '../services/firebase_auth_service.dart';
-import '../ui/driver_design.dart';
 import '../ui/trddk_brand_colors.dart';
 import '../ui/trddk_typography.dart';
 import 'loading_screen.dart';
+
+bool isDriverStoreReviewPhone(String input) {
+  final digits = input.replaceAll(RegExp(r'\D'), '');
+  return digits == '966500300002' ||
+      digits == '500300002' ||
+      digits == '0500300002';
+}
+
+String _toE164(String input) {
+  final digits = input.replaceAll(RegExp(r'\D'), '');
+  if (digits.startsWith('966') && digits.length >= 12) {
+    return '+$digits';
+  }
+  if (digits.startsWith('05') && digits.length == 10) {
+    return '+966${digits.substring(1)}';
+  }
+  if (digits.startsWith('5') && digits.length == 9) {
+    return '+966$digits';
+  }
+  if (input.trim().startsWith('+') && digits.isNotEmpty) {
+    return '+$digits';
+  }
+  return digits.isEmpty ? input.trim() : '+$digits';
+}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,132 +44,449 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
+enum _LoginStep { phone, otp }
+
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _emailFocusNode = FocusNode();
-  final _passwordFocusNode = FocusNode();
+  final _phoneController = TextEditingController();
+  final _codeController = TextEditingController(text: '+966');
+  final _otpController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
+  final _otpFocusNode = FocusNode();
   final _api = createDriverApi();
 
+  _LoginStep _step = _LoginStep.phone;
   bool _loading = false;
-  bool _obscurePassword = true;
-  String? _setupMessage;
-  String? _emailError;
-  String? _passwordError;
+  String? _phoneError;
+  String? _otpError;
+  String? _verificationId;
+  int? _resendToken;
+  bool _serverOtp = false;
+  Object? _playServicesAuthError;
+  int _secondsLeft = 0;
+  Timer? _timer;
 
-  Future<void> _signInWithPassword() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-    final l10n = context.l10n;
+  @override
+  void initState() {
+    super.initState();
+    _restorePendingOtp();
+  }
+
+  Future<void> _restorePendingOtp() async {
+    final pending = await DriverPrefs.instance.getPendingOtpPhone();
+    if (!mounted || pending == null) return;
+    setState(() {
+      if (pending.startsWith('+966')) {
+        _codeController.text = '+966';
+        _phoneController.text = pending.substring(4);
+      } else if (pending.startsWith('+')) {
+        _codeController.text = '';
+        _phoneController.text = pending;
+      } else {
+        _phoneController.text = pending;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _phoneController.dispose();
+    _codeController.dispose();
+    _otpController.dispose();
+    _phoneFocusNode.dispose();
+    _otpFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _startResendTimer() {
+    _timer?.cancel();
+    setState(() => _secondsLeft = 60);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_secondsLeft <= 1) {
+        timer.cancel();
+        setState(() => _secondsLeft = 0);
+        return;
+      }
+      setState(() => _secondsLeft--);
+    });
+  }
+
+  /// Full number from the editable country code (default +966) and the
+  /// national number. A leading 0 (e.g. 05XXXXXXXX) is dropped.
+  String get _fullPhone {
+    final code = _codeController.text.replaceAll(RegExp(r'\D'), '');
+    final raw = _phoneController.text.trim();
+    if (code.isEmpty || raw.startsWith('+')) return _toE164(raw);
+    final national =
+        raw.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^0+'), '');
+    if (national.isEmpty) return '';
+    return '+$code$national';
+  }
+
+  Future<void> _signIn() async {
+    final phone = _phoneController.text.trim().isEmpty ? '' : _fullPhone;
 
     setState(() {
-      _emailError = email.isEmpty ? l10n.enterEmail : null;
-      _passwordError = password.isEmpty ? l10n.enterPassword : null;
-      _setupMessage = null;
+      _phoneError = phone.isEmpty ? context.l10n.enterPhone : null;
     });
-    if (_emailError != null || _passwordError != null) return;
+    if (_phoneError != null) return;
+
+    if (isDriverStoreReviewPhone(phone)) {
+      setState(() {
+        _step = _LoginStep.otp;
+        _otpError = null;
+        _loading = false;
+      });
+      _otpFocusNode.requestFocus();
+      return;
+    }
 
     setState(() => _loading = true);
+    _serverOtp = false;
+    _playServicesAuthError = null;
     try {
-      await DriverFirebaseAuth.instance.signIn(email, password);
-      final token = await DriverFirebaseAuth.instance.idToken();
-      if (token == null || !mounted) return;
-      final session = await _api.driverFirebaseLogin(idToken: token);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        driverRoute(builder: (_) => LoadingScreen(session: session)),
-      );
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        try {
-          final hint = await _api.driverLoginHint(email: email);
-          if (!mounted) return;
-          if (!hint.requiresPassword) {
-            setState(() {
-              _setupMessage = l10n.setupInstructions;
-              _passwordError = null;
-            });
-            return;
-          }
-        } catch (_) {}
-      }
-      setState(() {
-        _passwordError = e.message ?? l10n.loginTitle;
-      });
+      await _sendFirebaseSms(phone);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _passwordError = e.toString().replaceFirst('Exception: ', '');
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      final started = await _fallbackToServerOtp(phone, e, onOtpStep: false);
+      if (!mounted || started) return;
+      setState(() {
+        _phoneError = _shownLoginError(e);
+        _loading = false;
+      });
     }
   }
 
-  Future<void> _sendSetupLink() async {
-    final email = _emailController.text.trim();
-    final l10n = context.l10n;
-    if (email.isEmpty) {
-      setState(() => _emailError = l10n.enterEmail);
+  /// Server SMS only after Firebase fails for a Play Services reason on a
+  /// device that does not have Play Services. Returns true when the OTP
+  /// screen was opened.
+  Future<bool> _fallbackToServerOtp(
+    String phone,
+    Object firebaseError, {
+    required bool onOtpStep,
+  }) async {
+    if (!_isPlayServicesAuthFailure(firebaseError)) return false;
+    if (await googlePlayServicesAvailable()) return false;
+    if (!mounted) return false;
+    _playServicesAuthError = firebaseError;
+    try {
+      await _api.driverStartLogin(phone: phone);
+    } catch (serverError) {
+      if (!mounted) return true;
+      final message = _shownLoginError(serverError);
+      setState(() {
+        if (onOtpStep) {
+          _otpError = message;
+        } else {
+          _phoneError = message;
+        }
+        _loading = false;
+        _serverOtp = false;
+      });
+      return true;
+    }
+    if (!mounted) return true;
+    setState(() {
+      _serverOtp = true;
+      _step = _LoginStep.otp;
+      _otpError = null;
+      _loading = false;
+    });
+    _startResendTimer();
+    _otpFocusNode.requestFocus();
+    return true;
+  }
+
+  Future<void> _sendFirebaseSms(String phone) async {
+    final done = Completer<void>();
+    await DriverFirebaseAuth.instance.verifyPhoneNumber(
+      phone: phone,
+      forceResendingToken: _resendToken,
+      verificationCompleted: (credential) {
+        if (!done.isCompleted) done.complete();
+        unawaited(_completeWithCredential(credential));
+      },
+      verificationFailed: (error) {
+        if (!done.isCompleted) done.completeError(error);
+      },
+      codeSent: (verificationId, resendToken) {
+        _verificationId = verificationId;
+        _resendToken = resendToken;
+        if (!done.isCompleted) done.complete();
+        if (!mounted) return;
+        setState(() {
+          _step = _LoginStep.otp;
+          _otpError = null;
+          _loading = false;
+        });
+        unawaited(DriverPrefs.instance.savePendingOtp(phone: phone));
+        _startResendTimer();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _otpFocusNode.requestFocus();
+        });
+      },
+      codeAutoRetrievalTimeout: (verificationId) {
+        _verificationId = verificationId;
+      },
+    );
+    final sendFailed = context.l10n.otpSendFailed;
+    await done.future.timeout(
+      const Duration(seconds: 90),
+      onTimeout: () => throw Exception('$sendFailed\n(timeout)'),
+    );
+  }
+
+  Future<void> _completeWithCredential(PhoneAuthCredential credential) async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      await DriverFirebaseAuth.instance.signInWithCredential(credential);
+      await _openDriverSession();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _otpError = _loginError(e);
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _openDriverSession() async {
+    final token = await DriverFirebaseAuth.instance.idToken();
+    if (!mounted) return;
+    if (token == null || token.isEmpty) {
+      throw Exception(context.l10n.invalidOtp);
+    }
+    final session = await _api.driverFirebaseLogin(idToken: token);
+    await DriverPrefs.instance.clearPendingOtp();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => LoadingScreen(session: session),
+      ),
+    );
+  }
+
+  Future<void> _verifyOtp() async {
+    final code = _otpController.text.trim();
+    if (isDriverStoreReviewPhone(_fullPhone)) {
+      await _verifyReviewCode(code);
+      return;
+    }
+
+    if (_serverOtp) {
+      if (code.length != 6) {
+        setState(() => _otpError = context.l10n.enterOtp);
+        return;
+      }
+      setState(() {
+        _loading = true;
+        _otpError = null;
+      });
+      try {
+        final session = await _api.driverVerifyOtp(phone: _fullPhone, code: code);
+        await DriverPrefs.instance.clearPendingOtp();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => LoadingScreen(session: session),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _otpError = _loginError(e);
+          _loading = false;
+        });
+      }
+      return;
+    }
+
+    final verificationId = _verificationId;
+
+    if (code.length != 6) {
+      setState(() => _otpError = context.l10n.enterOtp);
+      return;
+    }
+    if (verificationId == null) {
+      setState(() => _otpError = context.l10n.invalidOtp);
       return;
     }
 
     setState(() {
       _loading = true;
-      _emailError = null;
+      _otpError = null;
     });
+
     try {
-      final hint = await _api.driverLoginHint(email: email);
-      if (!mounted) return;
-      if (hint.requiresPassword) {
-        setState(() {
-          _setupMessage = l10n.loginSubtitlePassword;
-        });
-        return;
-      }
-      await DriverFirebaseAuth.instance.sendPasswordReset(email);
-      if (mounted) {
-        setState(() => _setupMessage = l10n.setupLinkSent);
-      }
-    } on FirebaseAuthException catch (e) {
-      if (mounted && (e.code == 'user-not-found' || e.code == 'invalid-email')) {
-        setState(() => _emailError = l10n.enterEmail);
-      }
+      await DriverFirebaseAuth.instance.signInWithSmsCode(
+        verificationId: verificationId,
+        smsCode: code,
+      );
+      await _openDriverSession();
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _emailError = e.toString().replaceFirst('Exception: ', '');
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        _otpError = _loginError(e);
+        _loading = false;
+      });
     }
   }
 
-  Future<void> _forgotPassword() async {
-    final email = _emailController.text.trim();
-    final l10n = context.l10n;
-    if (email.isEmpty) {
-      setState(() => _emailError = l10n.enterEmail);
+  Future<void> _verifyReviewCode(String code) async {
+    if (code.length != 8) {
+      setState(() => _otpError = context.l10n.enterOtp);
       return;
     }
+
+    setState(() {
+      _loading = true;
+      _otpError = null;
+    });
     try {
-      await DriverFirebaseAuth.instance.sendPasswordReset(email);
-      if (mounted) DriverSnack.show(context, l10n.resetEmailHint);
-    } catch (_) {
-      if (mounted) DriverSnack.show(context, l10n.resetEmailHint);
+      final session = await _api.driverReviewLogin(
+        phone: _fullPhone,
+        code: code,
+      );
+      await DriverPrefs.instance.clearPendingOtp();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => LoadingScreen(session: session),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _otpError = context.l10n.invalidOtp;
+        _loading = false;
+      });
     }
   }
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _emailFocusNode.dispose();
-    _passwordFocusNode.dispose();
-    super.dispose();
+  Future<void> _resendCode() async {
+    if (isDriverStoreReviewPhone(_fullPhone)) return;
+    if (_secondsLeft > 0 || _loading) return;
+    setState(() {
+      _loading = true;
+      _otpError = null;
+    });
+    try {
+      if (_serverOtp) {
+        await _api.driverStartLogin(phone: _fullPhone);
+        if (!mounted) return;
+        setState(() => _loading = false);
+        _startResendTimer();
+        return;
+      }
+      await _sendFirebaseSms(_fullPhone);
+      if (!mounted) return;
+      setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      if (!_serverOtp) {
+        final started = await _fallbackToServerOtp(
+          _fullPhone,
+          e,
+          onOtpStep: true,
+        );
+        if (!mounted || started) return;
+      }
+      setState(() {
+        _otpError = _shownLoginError(e);
+        _loading = false;
+      });
+    }
+  }
+
+  void _backToPhone() {
+    _timer?.cancel();
+    unawaited(DriverPrefs.instance.clearPendingOtp());
+    setState(() {
+      _step = _LoginStep.phone;
+      _otpController.clear();
+      _otpError = null;
+      _verificationId = null;
+      _serverOtp = false;
+      _playServicesAuthError = null;
+      _loading = false;
+      _secondsLeft = 0;
+    });
+  }
+
+  bool _isSmsProviderMissing(Object error) {
+    final raw = error.toString();
+    return raw.contains('SMS_PROVIDER_MISSING') ||
+        raw.contains('تعذّر إرسال رمز التحقق') ||
+        raw.contains('تعذر إرسال رمز التحقق');
+  }
+
+  bool _isPlayServicesAuthFailure(Object error) {
+    final code = error is FirebaseAuthException ? error.code.toLowerCase() : '';
+    final raw = error.toString().toLowerCase();
+    final haystack = '$code $raw';
+    const markers = [
+      'missing-client-identifier',
+      'app-not-authorized',
+      'captcha-check-failed',
+      'invalid-app-credential',
+      'play-integrity',
+      'play_integrity',
+      'play services',
+      'playservices',
+      'googleapiavailability',
+      'service_missing',
+      'service_invalid',
+      'service_disabled',
+      'service_version_update_required',
+      '(timeout)',
+    ];
+    return markers.any(haystack.contains);
+  }
+
+  String _shownLoginError(Object error) {
+    final original = _playServicesAuthError;
+    if (original != null &&
+        !identical(original, error) &&
+        _isSmsProviderMissing(error)) {
+      return _loginError(original);
+    }
+    return _loginError(error);
+  }
+
+  String _loginError(Object error) {
+    final raw = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+    final code = error is FirebaseAuthException ? error.code : raw;
+    if (code.contains('invalid-phone-number') ||
+        raw.contains('badly formatted') ||
+        raw.contains('invalid-email')) {
+      return context.l10n.enterPhone;
+    }
+    // Show Firebase's error code under the message so the real cause
+    // (quota, app not authorized, region blocked...) is visible when testing.
+    final ref = error is FirebaseAuthException ? '\n(${error.code})' : '';
+    if (code.contains('too-many-requests') || code.contains('quota')) {
+      return '${context.l10n.otpQuota}$ref';
+    }
+    if (code.contains('invalid-verification-code') ||
+        code.contains('invalid-verification-id') ||
+        code.contains('session-expired')) {
+      return context.l10n.invalidOtp;
+    }
+    if (raw.contains('تعذّر إرسال رمز التحقق') ||
+        raw.contains('تعذر إرسال رمز التحقق')) {
+      return '${context.l10n.otpSendFailed}\n(SMS_PROVIDER_MISSING)';
+    }
+    if (code.contains('missing-client-identifier') ||
+        code.contains('app-not-authorized') ||
+        code.contains('captcha-check-failed')) {
+      return '${context.l10n.otpSendFailed}$ref';
+    }
+    return raw.trim().isEmpty ? '${context.l10n.otpSendFailed}$ref' : raw.trim();
   }
 
   @override
@@ -186,42 +529,54 @@ class _LoginScreenState extends State<LoginScreen> {
                           TrddkBrandColors.cardMargin,
                           24,
                         ),
-                        child: _LoginForm(
-                            l10n: l10n,
-                            emailController: _emailController,
-                            passwordController: _passwordController,
-                            emailFocusNode: _emailFocusNode,
-                            passwordFocusNode: _passwordFocusNode,
-                            loading: _loading,
-                            obscurePassword: _obscurePassword,
-                            setupMessage: _setupMessage,
-                            emailError: _emailError,
-                            passwordError: _passwordError,
-                            onTogglePassword: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                            onEmailChanged: (_) => setState(() {
-                              _emailError = null;
-                              _setupMessage = null;
-                            }),
-                            onPasswordChanged: (_) => setState(() {
-                              _passwordError = null;
-                              _setupMessage = null;
-                            }),
-                            onForgotPassword: _loading ? null : _forgotPassword,
-                            onCreatePassword: _loading ? null : _sendSetupLink,
-                          onSignIn: _loading ? null : _signInWithPassword,
-                        ),
+                        child: _step == _LoginStep.phone
+                            ? _LoginForm(
+                                l10n: l10n,
+                                phoneController: _phoneController,
+                                codeController: _codeController,
+                                phoneFocusNode: _phoneFocusNode,
+                                loading: _loading,
+                                phoneError: _phoneError,
+                                onPhoneChanged: (_) => setState(() {
+                                  _phoneError = null;
+                                }),
+                                onSignIn: _loading ? null : _signIn,
+                              )
+                            : _OtpForm(
+                                l10n: l10n,
+                                phone: _fullPhone,
+                                codeLength: isDriverStoreReviewPhone(
+                                  _fullPhone,
+                                )
+                                    ? 8
+                                    : 6,
+                                otpController: _otpController,
+                                otpFocusNode: _otpFocusNode,
+                                loading: _loading,
+                                otpError: _otpError,
+                                secondsLeft: _secondsLeft,
+                                onOtpChanged: (_) => setState(() {
+                                  _otpError = null;
+                                }),
+                                onVerify: _loading ? null : _verifyOtp,
+                                onResend: _secondsLeft > 0 || _loading
+                                    ? null
+                                    : _resendCode,
+                                onChangePhone: _loading ? null : _backToPhone,
+                              ),
                       ),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 16),
-                        child: Text(
-                          l10n.needHelp,
-                          textAlign: TextAlign.center,
-                          style: TrddkTypography.text(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: TrddkBrandColors.textSecondary,
+                        child: TextButton(
+                          onPressed: () => openTardadiSupportEmail(),
+                          child: Text(
+                            l10n.needHelp,
+                            textAlign: TextAlign.center,
+                            style: TrddkTypography.text(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: TrddkBrandColors.textSecondary,
+                            ).copyWith(decoration: TextDecoration.underline),
                           ),
                         ),
                       ),
@@ -302,161 +657,316 @@ class _AuthHeader extends StatelessWidget {
 class _LoginForm extends StatelessWidget {
   const _LoginForm({
     required this.l10n,
-    required this.emailController,
-    required this.passwordController,
-    required this.emailFocusNode,
-    required this.passwordFocusNode,
+    required this.phoneController,
+    required this.codeController,
+    required this.phoneFocusNode,
     required this.loading,
-    required this.obscurePassword,
-    required this.setupMessage,
-    required this.emailError,
-    required this.passwordError,
-    required this.onTogglePassword,
-    required this.onEmailChanged,
-    required this.onPasswordChanged,
-    required this.onForgotPassword,
-    required this.onCreatePassword,
+    required this.phoneError,
+    required this.onPhoneChanged,
     required this.onSignIn,
   });
 
   final AppLocalizations l10n;
-  final TextEditingController emailController;
-  final TextEditingController passwordController;
-  final FocusNode emailFocusNode;
-  final FocusNode passwordFocusNode;
+  final TextEditingController phoneController;
+  final TextEditingController codeController;
+  final FocusNode phoneFocusNode;
   final bool loading;
-  final bool obscurePassword;
-  final String? setupMessage;
-  final String? emailError;
-  final String? passwordError;
-  final VoidCallback onTogglePassword;
-  final ValueChanged<String> onEmailChanged;
-  final ValueChanged<String> onPasswordChanged;
-  final VoidCallback? onForgotPassword;
-  final VoidCallback? onCreatePassword;
+  final String? phoneError;
+  final ValueChanged<String> onPhoneChanged;
   final VoidCallback? onSignIn;
+
+  @override
+  Widget build(BuildContext context) {
+    // Same layout as the passenger "Verify your number" screen.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.loginTitle,
+          textAlign: TextAlign.center,
+          style: TrddkTypography.text(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: TrddkBrandColors.titleNavy,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          l10n.loginSubtitleCredentials,
+          textAlign: TextAlign.center,
+          style: TrddkTypography.text(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: TrddkBrandColors.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          l10n.phoneNumber,
+          style: TrddkTypography.text(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: TrddkBrandColors.titleNavy,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 88,
+                child: TextField(
+                  controller: codeController,
+                  keyboardType: TextInputType.phone,
+                  textAlign: TextAlign.center,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                    LengthLimitingTextInputFormatter(5),
+                  ],
+                  onChanged: onPhoneChanged,
+                  style: TrddkTypography.text(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: TrddkBrandColors.titleNavy,
+                  ),
+                  decoration: _phoneInputDecoration(
+                    fill: const Color(0xFFF5F6FA),
+                    borderColor: Colors.black26,
+                    hasError: phoneError != null,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: phoneController,
+                  focusNode: phoneFocusNode,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(14),
+                  ],
+                  onChanged: onPhoneChanged,
+                  onSubmitted: (_) {
+                    if (onSignIn != null) onSignIn!();
+                  },
+                  style: TrddkTypography.text(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: TrddkBrandColors.titleNavy,
+                  ),
+                  decoration: _phoneInputDecoration(
+                    fill: Colors.white,
+                    borderColor: Colors.black,
+                    hasError: phoneError != null,
+                    hint: l10n.enterPhoneNumber,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (phoneError != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            phoneError!,
+            style: TrddkTypography.text(
+              fontSize: 13,
+              color: TrddkBrandColors.error,
+            ),
+          ),
+        ],
+        const SizedBox(height: 28),
+        _PrimaryButton(
+          label: l10n.sendCode,
+          loading: loading,
+          onPressed: onSignIn,
+        ),
+      ],
+    );
+  }
+}
+
+InputDecoration _phoneInputDecoration({
+  required Color fill,
+  required Color borderColor,
+  required bool hasError,
+  String? hint,
+}) {
+  final color = hasError ? TrddkBrandColors.error : borderColor;
+  OutlineInputBorder border(Color c) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: c, width: 1.5),
+      );
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: TrddkTypography.text(
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
+      color: TrddkBrandColors.textSecondary.withValues(alpha: 0.7),
+    ),
+    filled: true,
+    fillColor: fill,
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+    enabledBorder: border(color),
+    focusedBorder: border(hasError ? TrddkBrandColors.error : TrddkBrandColors.orange),
+    border: border(color),
+  );
+}
+
+class _OtpForm extends StatelessWidget {
+  const _OtpForm({
+    required this.l10n,
+    required this.phone,
+    required this.otpController,
+    required this.otpFocusNode,
+    required this.loading,
+    required this.otpError,
+    required this.secondsLeft,
+    required this.onOtpChanged,
+    required this.onVerify,
+    required this.onResend,
+    required this.onChangePhone,
+    this.codeLength = 6,
+  });
+
+  final AppLocalizations l10n;
+  final String phone;
+  final int codeLength;
+  final TextEditingController otpController;
+  final FocusNode otpFocusNode;
+  final bool loading;
+  final String? otpError;
+  final int secondsLeft;
+  final ValueChanged<String> onOtpChanged;
+  final VoidCallback? onVerify;
+  final VoidCallback? onResend;
+  final VoidCallback? onChangePhone;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          l10n.verifyYourPhoneNumber,
+          style: TrddkTypography.text(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: TrddkBrandColors.titleNavy,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          l10n.enterSixDigitCode,
+          style: TrddkTypography.text(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: TrddkBrandColors.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          phone,
+          textDirection: TextDirection.ltr,
+          style: TrddkTypography.text(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: TrddkBrandColors.titleNavy,
+          ),
+        ),
+        const SizedBox(height: 20),
+        _AuthField(
+          label: l10n.enterOtp,
+          controller: otpController,
+          focusNode: otpFocusNode,
+          hintText: codeLength == 8 ? '••••••••' : '••••••',
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          textDirection: TextDirection.ltr,
+          prefixIcon: Icons.lock_outline_rounded,
+          errorText: otpError,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(codeLength),
+          ],
+          onChanged: onOtpChanged,
+          onSubmitted: (_) {
+            if (onVerify != null) onVerify!();
+          },
+        ),
+        const SizedBox(height: 24),
+        _PrimaryButton(
+          label: loading ? l10n.verifying : l10n.verify,
+          loading: loading,
+          onPressed: onVerify,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
             Text(
-              l10n.loginTitle,
+              l10n.didntReceiveCode,
               style: TrddkTypography.text(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: TrddkBrandColors.titleNavy,
-                height: 1.2,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              l10n.loginSubtitleCredentials,
-              style: TrddkTypography.text(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
+                fontSize: 13,
                 color: TrddkBrandColors.textSecondary,
-                height: 1.4,
               ),
             ),
-            const SizedBox(height: 20),
-            _AuthField(
-              label: l10n.emailLabel,
-              controller: emailController,
-              focusNode: emailFocusNode,
-              hintText: l10n.emailHint,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              textDirection: TextDirection.ltr,
-              prefixIcon: Icons.mail_outline_rounded,
-              errorText: emailError,
-              onChanged: onEmailChanged,
-              onSubmitted: (_) => passwordFocusNode.requestFocus(),
-            ),
-            const SizedBox(height: 16),
-            _AuthField(
-              label: l10n.passwordLabel,
-              controller: passwordController,
-              focusNode: passwordFocusNode,
-              hintText: l10n.passwordHint,
-              obscureText: obscurePassword,
-              textInputAction: TextInputAction.done,
-              prefixIcon: Icons.lock_outline_rounded,
-              suffixIcon: obscurePassword
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
-              onSuffixTap: onTogglePassword,
-              errorText: passwordError,
-              onChanged: onPasswordChanged,
-              onSubmitted: (_) {
-                if (onSignIn != null) onSignIn!();
-              },
-            ),
-            if (setupMessage != null) ...[
-              const SizedBox(height: 8),
+            if (onResend == null && secondsLeft > 0)
               Text(
-                setupMessage!,
+                l10n.resendIn(secondsLeft.toString().padLeft(2, '0')),
                 style: TrddkTypography.text(
                   fontSize: 13,
-                  color: TrddkBrandColors.textSecondary,
-                  height: 1.45,
+                  fontWeight: FontWeight.w600,
+                  color: TrddkBrandColors.titleNavy,
                 ),
-              ),
-            ],
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton(
-                onPressed: onForgotPassword,
+              )
+            else
+              TextButton(
+                onPressed: onResend,
                 style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+                  padding: EdgeInsets.zero,
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: Text(
-                  l10n.forgotPassword,
+                  l10n.resendCode,
                   style: TrddkTypography.text(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                     color: TrddkBrandColors.orange,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _PrimaryButton(
-              label: l10n.signIn,
-              loading: loading,
-              onPressed: onSignIn,
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
-              children: [
-                Text(
-                  l10n.noPasswordYet,
-                  style: TrddkTypography.text(
-                    fontSize: 14,
-                    color: TrddkBrandColors.textSecondary,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: onCreatePassword,
-                  child: Text(
-                    l10n.createPassword,
-                    style: TrddkTypography.text(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: TrddkBrandColors.orange,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ],
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton(
+            onPressed: onChangePhone,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              l10n.changePhone,
+              style: TrddkTypography.text(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: TrddkBrandColors.titleNavy,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -470,11 +980,9 @@ class _AuthField extends StatefulWidget {
     this.keyboardType,
     this.textInputAction,
     this.textDirection,
-    this.obscureText = false,
     this.prefixIcon,
-    this.suffixIcon,
-    this.onSuffixTap,
     this.errorText,
+    this.inputFormatters,
     this.onChanged,
     this.onSubmitted,
   });
@@ -486,11 +994,9 @@ class _AuthField extends StatefulWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final TextDirection? textDirection;
-  final bool obscureText;
   final IconData? prefixIcon;
-  final IconData? suffixIcon;
-  final VoidCallback? onSuffixTap;
   final String? errorText;
+  final List<TextInputFormatter>? inputFormatters;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
 
@@ -542,9 +1048,9 @@ class _AuthFieldState extends State<_AuthField> {
             keyboardType: widget.keyboardType,
             textInputAction: widget.textInputAction,
             textDirection: widget.textDirection,
-            obscureText: widget.obscureText,
             onChanged: widget.onChanged,
             onSubmitted: widget.onSubmitted,
+            inputFormatters: widget.inputFormatters,
             style: TrddkTypography.text(
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -567,16 +1073,6 @@ class _AuthFieldState extends State<_AuthField> {
                       color: focused
                           ? TrddkBrandColors.orange
                           : TrddkBrandColors.textSecondary,
-                    ),
-              suffixIcon: widget.suffixIcon == null
-                  ? null
-                  : IconButton(
-                      onPressed: widget.onSuffixTap,
-                      icon: Icon(
-                        widget.suffixIcon,
-                        size: 20,
-                        color: TrddkBrandColors.textSecondary,
-                      ),
                     ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 14),
               enabledBorder: OutlineInputBorder(

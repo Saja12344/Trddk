@@ -26,11 +26,7 @@ if ! command -v emulator >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! adb devices 2>/dev/null | grep -q "emulator"; then
-  echo "Starting Android emulator: $ANDROID_AVD"
-  nohup emulator -avd "$ANDROID_AVD" -no-snapshot-load >/tmp/tardadi-emulator.log 2>&1 &
-  adb wait-for-device
-fi
+bash "$ROOT/scripts/start-android-emulator.sh"
 
 DEVICE_ID="$(adb devices 2>/dev/null | awk '/emulator-/{print $1; exit}')"
 

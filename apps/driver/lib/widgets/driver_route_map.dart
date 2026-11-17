@@ -13,6 +13,9 @@ class DriverRouteMap extends StatelessWidget {
     this.driverPosition,
     this.driverHeading,
     this.followDriver = false,
+    this.navigationPolyline,
+    this.trimTraveled = false,
+    this.followTopPadding = 64,
   });
 
   final RouteModel route;
@@ -22,8 +25,15 @@ class DriverRouteMap extends StatelessWidget {
   final GeoPoint? driverPosition;
   final double? driverHeading;
   final bool followDriver;
+  final List<LatLng>? navigationPolyline;
+  final bool trimTraveled;
+  final double followTopPadding;
 
-  List<LatLng> get _roadPolyline => resolveRoutePoints(route, stops);
+  List<LatLng> get _roadPolyline {
+    final navigation = navigationPolyline;
+    if (navigation != null && navigation.length >= 2) return navigation;
+    return resolveRoutePoints(route, stops);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +46,10 @@ class DriverRouteMap extends StatelessWidget {
       driverHeading: driverHeading,
       followMode: followDriver,
       roadPolyline: _roadPolyline,
+      trimTraveled: trimTraveled &&
+          navigationPolyline != null &&
+          navigationPolyline!.length >= 2,
+      followTopPadding: followTopPadding,
       borderRadius: 0,
     );
   }

@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:tardadi_core/tardadi_core.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/crowd_level.dart';
 import '../services/driver_api.dart';
+import '../services/driver_navigation.dart';
 import '../services/driver_prefs.dart';
 import '../services/session_store.dart';
 import '../ui/driver_design.dart';
@@ -17,7 +19,9 @@ import '../ui/driver_map_config.dart';
 import '../ui/platform_ui.dart';
 import '../utils/arabic_display.dart';
 import '../widgets/driver_route_map.dart';
+import '../widgets/navigation_banner.dart';
 import '../widgets/trip_options_panel.dart';
+import 'login_screen.dart' show isDriverStoreReviewPhone;
 import 'settings_screen.dart';
 
 class MapScreen extends StatefulWidget {
@@ -30,7 +34,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen>
     with SingleTickerProviderStateMixin {
   static const _startThresholdMeters = 1500.0;
-  static const _enforceStartDistance = false;
+  static const _enforceStartDistance = true;
 
   late final AnimationController _radarController;
   Timer? _gpsTimer;
@@ -43,12 +47,22 @@ class _MapScreenState extends State<MapScreen>
   bool _onBreak = false;
   double _distanceKm = 40;
   double _offRouteMeters = 0;
+  /// Distance to the route's start point; unknown until GPS is read.
+  double _startMeters = double.infinity;
   String _selectedVehicle = 'Bus';
   String _lastGps = '--';
   CrowdLevel _crowdLevel = CrowdLevel.medium;
   int _targetStopIndex = 0;
   bool _returnLeg = false;
   Position? _driverPosition;
+  final _voice = NavVoiceGuide();
+  final _rerouteGate = NavRerouteGate();
+  DriverNavigationRoute? _navRoute;
+  int? _navEtaSeconds;
+  var _navMuted = false;
+  var _voiceNotice = false;
+  var _voiceNoticeRecorded = false;
+  var _navRequestId = 0;
 
   DriverSession get _session => SessionStore.instance.session!;
 
@@ -99,6 +113,10 @@ class _MapScreenState extends State<MapScreen>
   Color get _routeColor => _colorFromHex(_session.route.colorHex);
 
   int get _etaMinutes {
+    final navSeconds = _navEtaSeconds;
+    if (_tripActive && navSeconds != null && navSeconds > 0) {
+      return (navSeconds / 60).ceil().clamp(1, 99);
+    }
     final target = _activeTarget;
     final position = _driverPosition;
     if (target == null) return 0;
@@ -115,13 +133,21 @@ class _MapScreenState extends State<MapScreen>
 
   bool get _isOffRoute => _offRouteMeters > 80;
 
+  /// App Store / Play reviewers are never near the route, so their demo
+  /// account skips the distance check.
+  bool get _isReviewSession => isDriverStoreReviewPhone(_session.driver.phone);
+
   bool get _canStart =>
-      !_enforceStartDistance || _distanceKm * 1000 <= _startThresholdMeters;
+      !_enforceStartDistance ||
+      _isReviewSession ||
+      _startMeters <= _startThresholdMeters;
 
   @override
   void initState() {
     super.initState();
     _selectedVehicle = SessionStore.instance.selectedVehicle ?? 'Bus';
+    _voice.onUnavailable = _noteVoiceUnavailable;
+    unawaited(_loadNavMute());
     _radarController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -139,6 +165,8 @@ class _MapScreenState extends State<MapScreen>
     _radarController.dispose();
     _gpsTimer?.cancel();
     _distanceTimer?.cancel();
+    unawaited(_voice.dispose());
+    unawaited(_setTripAwake(false));
     super.dispose();
   }
 
@@ -184,12 +212,23 @@ class _MapScreenState extends State<MapScreen>
         target.latitude,
         target.longitude,
       );
+      final start = resolveRouteStart(_session.route, _orderedStops);
+      final startMeters = start == null
+          ? meters
+          : Geolocator.distanceBetween(
+              position.latitude,
+              position.longitude,
+              start.latitude,
+              start.longitude,
+            );
       if (mounted) {
         setState(() {
           _driverPosition = position;
           _distanceKm = (meters / 1000).clamp(0.0, 999);
+          _startMeters = startMeters;
           _offRouteMeters = _measureOffRoute(position);
         });
+        _onNavigationTick(position);
       }
     } catch (_) {
       // Keep the designed default distance when location is unavailable.
@@ -261,7 +300,12 @@ class _MapScreenState extends State<MapScreen>
     if (!_canStart) {
       final l10n = context.l10n;
       _showError(
-        l10n.cannotStartTrip(_formatDistance(context, _distanceKm)),
+        l10n.cannotStartTrip(
+          _formatDistance(
+            context,
+            _startMeters.isFinite ? (_startMeters / 1000).clamp(0.0, 999) : _distanceKm,
+          ),
+        ),
       );
       return;
     }
@@ -286,7 +330,14 @@ class _MapScreenState extends State<MapScreen>
         _targetStopIndex = 0;
         _returnLeg = false;
         _etaSheetExpanded = false;
+        _navRoute = null;
+        _navEtaSeconds = null;
+        _voiceNotice = false;
       });
+      _rerouteGate.reset();
+      unawaited(_setTripAwake(true));
+      unawaited(_prepareNavVoice());
+      unawaited(_loadNavigationRoute());
       await _startGps(tripId);
     } catch (error) {
       _showError(error.toString().replaceFirst('Exception: ', ''));
@@ -301,6 +352,10 @@ class _MapScreenState extends State<MapScreen>
       await _api.endTrip(tripId: tripId, driverId: _session.driver.driverId);
       _gpsTimer?.cancel();
       SessionStore.instance.updateTripId(null);
+      _navRequestId++;
+      _rerouteGate.reset();
+      unawaited(_voice.stop());
+      unawaited(_setTripAwake(false));
       setState(() {
         _tripActive = false;
         _tripPanelOpen = false;
@@ -309,6 +364,9 @@ class _MapScreenState extends State<MapScreen>
         _targetStopIndex = 0;
         _returnLeg = false;
         _etaSheetExpanded = false;
+        _navRoute = null;
+        _navEtaSeconds = null;
+        _voiceNotice = false;
       });
     } catch (error) {
       _showError(error.toString().replaceFirst('Exception: ', ''));
@@ -358,6 +416,7 @@ class _MapScreenState extends State<MapScreen>
             _lastGps = TimeOfDay.now().format(context);
             _offRouteMeters = _measureOffRoute(position);
           });
+          _onNavigationTick(position);
         }
       } catch (_) {}
       finally {
@@ -484,6 +543,190 @@ class _MapScreenState extends State<MapScreen>
       _etaSheetExpanded = true;
     });
     await _refreshDistance();
+    unawaited(_loadNavigationRoute());
+  }
+
+  Future<void> _loadNavMute() async {
+    final muted = await DriverPrefs.instance.isNavVoiceMuted();
+    if (!mounted) return;
+    setState(() => _navMuted = muted);
+  }
+
+  Future<void> _setTripAwake(bool awake) async {
+    try {
+      if (awake) {
+        await WakelockPlus.enable();
+      } else {
+        await WakelockPlus.disable();
+      }
+    } catch (_) {}
+  }
+
+  String get _navLanguage => context.l10n.isArabic ? 'ar' : 'en';
+
+  Future<void> _prepareNavVoice() async {
+    if (!mounted) return;
+    await _voice.prepare(_navLanguage);
+  }
+
+  void _noteVoiceUnavailable() {
+    unawaited(_showVoiceNoticeOnce());
+  }
+
+  Future<void> _showVoiceNoticeOnce() async {
+    if (!mounted || _voiceNotice) return;
+    final language = _navLanguage;
+    final seen = await DriverPrefs.instance.hasSeenNavVoiceNotice(language);
+    if (!mounted || seen) return;
+    setState(() => _voiceNotice = true);
+    _recordVoiceNotice();
+  }
+
+  void _recordVoiceNotice() {
+    if (!_voiceNotice || _navCue == null || _voiceNoticeRecorded) return;
+    _voiceNoticeRecorded = true;
+    unawaited(DriverPrefs.instance.markNavVoiceNoticeSeen(_navLanguage));
+  }
+
+  void _dismissVoiceNotice() {
+    setState(() => _voiceNotice = false);
+    _voiceNoticeRecorded = true;
+    unawaited(DriverPrefs.instance.markNavVoiceNoticeSeen(_navLanguage));
+  }
+
+  Future<void> _toggleNavMute() async {
+    final next = !_navMuted;
+    setState(() => _navMuted = next);
+    await DriverPrefs.instance.setNavVoiceMuted(next);
+    if (next) await _voice.stop();
+  }
+
+  double? _usableHeading(Position position) {
+    final heading = position.heading;
+    if (heading.isNaN || heading < 0 || heading >= 360) return null;
+    return heading;
+  }
+
+  ({GeoPoint destination, List<GeoPoint> waypoints})? _navigationTargets() {
+    final remaining = _orderedStops.skip(_targetStopIndex).toList();
+    final to = _session.route.toLocation;
+    if (to != null) {
+      final destination = GeoPoint(
+        latitude: to.latitude,
+        longitude: to.longitude,
+      );
+      final waypoints = <GeoPoint>[
+        for (final stop in remaining)
+          if ((stop.latitude - destination.latitude).abs() > 1e-5 ||
+              (stop.longitude - destination.longitude).abs() > 1e-5)
+            GeoPoint(latitude: stop.latitude, longitude: stop.longitude),
+      ];
+      return (destination: destination, waypoints: waypoints);
+    }
+    if (remaining.isEmpty) return null;
+    final last = remaining.last;
+    return (
+      destination: GeoPoint(
+        latitude: last.latitude,
+        longitude: last.longitude,
+      ),
+      waypoints: [
+        for (final stop in remaining.take(remaining.length - 1))
+          GeoPoint(latitude: stop.latitude, longitude: stop.longitude),
+      ],
+    );
+  }
+
+  List<LatLng>? get _navigationPolyline {
+    final route = _navRoute;
+    if (!_tripActive || route == null || route.points.length < 2) return null;
+    return navigationLine(route);
+  }
+
+  NavManeuverCue? get _navCue {
+    final route = _navRoute;
+    final position = _driverPosition;
+    if (route == null || position == null) return null;
+    return nextManeuver(
+      route,
+      LatLng(position.latitude, position.longitude),
+    );
+  }
+
+  Future<void> _loadNavigationRoute() async {
+    if (!_tripActive || !mounted) return;
+    final position = _driverPosition;
+    final targets = _navigationTargets();
+    if (position == null || targets == null) {
+      if (mounted) {
+        setState(() {
+          _navRoute = null;
+          _navEtaSeconds = null;
+        });
+      }
+      return;
+    }
+
+    final requestId = ++_navRequestId;
+    final language = _navLanguage;
+    try {
+      final route = await _api.fetchDriverNavigation(
+        origin: GeoPoint(
+          latitude: position.latitude,
+          longitude: position.longitude,
+        ),
+        heading: _usableHeading(position),
+        waypoints: targets.waypoints,
+        destination: targets.destination,
+        language: language,
+      );
+      if (!mounted || requestId != _navRequestId || !_tripActive) return;
+      if (route.points.length < 2) {
+        setState(() {
+          _navRoute = null;
+          _navEtaSeconds = null;
+        });
+        return;
+      }
+      _voice.resetAnnouncements();
+      _rerouteGate.noteRouteUpdated();
+      setState(() {
+        _navRoute = route;
+        _navEtaSeconds = route.durationSeconds;
+      });
+      _recordVoiceNotice();
+      _onNavigationTick(position);
+    } catch (_) {
+      if (!mounted || requestId != _navRequestId || !_tripActive) return;
+      setState(() {
+        _navRoute = null;
+        _navEtaSeconds = null;
+      });
+    }
+  }
+
+  void _onNavigationTick(Position position) {
+    final route = _navRoute;
+    if (!_tripActive || _onBreak || route == null) return;
+    final here = LatLng(position.latitude, position.longitude);
+    final cue = nextManeuver(route, here);
+    if (cue != null && cue.instruction.isNotEmpty) {
+      unawaited(
+        _voice.announce(
+          stepKey: '${cue.stepIndex}:${cue.instruction}',
+          distanceMeters: cue.distanceMeters,
+          text: cue.instruction,
+          muted: _navMuted,
+        ),
+      );
+    }
+    final offRoute = distanceToPolylineMeters(navigationLine(route), here);
+    if (_rerouteGate.shouldReroute(
+      distanceMeters: offRoute,
+      now: DateTime.now(),
+    )) {
+      unawaited(_loadNavigationRoute());
+    }
   }
 
   Widget _buildIdleScaffold(DriverSession session) {
@@ -665,10 +908,26 @@ class _MapScreenState extends State<MapScreen>
                         driverPosition: _driverGeoPoint,
                         driverHeading: _driverPosition?.heading,
                         followDriver: _tripActive && !_onBreak,
+                        navigationPolyline: _navigationPolyline,
+                        trimTraveled: _navigationPolyline != null,
+                        followTopPadding: _navCue == null ? 64 : 168,
                       ),
                     ),
                   ),
-                if (_isOffRoute && !_tripPanelOpen)
+                if (_navCue != null && !_tripPanelOpen)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: NavigationBanner(
+                      cue: _navCue!,
+                      muted: _navMuted,
+                      showVoiceNotice: _voiceNotice,
+                      onMuteToggle: () => unawaited(_toggleNavMute()),
+                      onDismissVoiceNotice: _dismissVoiceNotice,
+                    ),
+                  ),
+                if (_isOffRoute && !_tripPanelOpen && _navRoute == null)
                   Positioned(
                     top: 12,
                     left: 16,

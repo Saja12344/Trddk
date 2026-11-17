@@ -39,14 +39,36 @@ android {
         }
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
             localProps.getProperty("GOOGLE_MAPS_API_KEY")
-                ?: "AIzaSyA9F15H3pU03Jq7Fi5LbH-3xbNVRJX6aSA"
+                ?: "AIzaSyAmVXpB4849FWhnK96ea2bg3Q-tO8aOdok"
+    }
+
+    val keystoreProperties = Properties()
+    val keystorePropertiesFile = rootProject.file("key.properties")
+    val hasReleaseKeystore = keystorePropertiesFile.exists()
+    if (hasReleaseKeystore) {
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    }
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                throw GradleException(
+                    "Release signing requires android/key.properties. Debug signing is rejected by Google Play."
+                )
+            }
         }
     }
 }

@@ -69,7 +69,7 @@ class AppLocalizations {
       'tardadi': 'TRDDK',
       'loginTitle': 'Login',
       'loginSubtitleCredentials':
-          'Sign in with the email registered for your driver account',
+          'Sign in with the phone number registered for your driver account',
       'loginSubtitlePassword': 'Enter your password',
       'loginSubtitleSetup': 'Create your password from the email link',
       'emailLabel': 'Email',
@@ -77,6 +77,12 @@ class AppLocalizations {
       'emailHint': 'Enter your email',
       'passwordHint': 'Enter your password',
       'signIn': 'Login',
+      'sendCode': 'Send verification code',
+      'changePhone': 'Change number',
+      'invalidOtp': 'Invalid or expired code. Request a new one.',
+      'otpTooMany': 'Too many attempts. Wait and try again.',
+      'otpSendFailed': 'Could not send the verification code. Try again.',
+      'otpQuota': 'SMS sending is temporarily unavailable. Try again later.',
       'signInAction': 'Sign in now',
       'resendSetupLink': 'Resend link',
       'changeEmail': 'Change email',
@@ -98,6 +104,12 @@ class AppLocalizations {
       'goCloserToStart': 'Go closer to start',
       'lastGps': 'Last GPS: {gps} • {route} • {vehicle}',
       'offRoute': 'Off route — returning to line',
+      'navThen': 'Then {instruction}',
+      'navContinue': 'Continue',
+      'navVoiceUnavailable':
+          'Voice guidance isn’t available on this phone.',
+      'navMute': 'Mute voice guidance',
+      'navUnmute': 'Turn voice guidance on',
       'endTripTitle': 'End trip?',
       'endTripMessage':
           'Are you sure you want to end this trip? This action will stop live tracking.',
@@ -169,7 +181,8 @@ class AppLocalizations {
       'demoOtpHint': 'رمز التحقق المؤقت هو 000000',
       'tardadi': 'TRDDK',
       'loginTitle': 'تسجيل الدخول',
-      'loginSubtitleCredentials': 'البريد الإلكتروني وكلمة المرور',
+      'loginSubtitleCredentials':
+          'سجّل الدخول برقم الجوال المسجّل لحساب السائق',
       'loginSubtitlePassword': 'أدخل كلمة المرور',
       'loginSubtitleSetup': 'أنشئ كلمة المرور من الرابط في بريدك',
       'emailLabel': 'البريد الإلكتروني',
@@ -177,6 +190,12 @@ class AppLocalizations {
       'emailHint': 'أدخل بريدك الإلكتروني',
       'passwordHint': 'أدخل كلمة المرور',
       'signIn': 'تسجيل الدخول',
+      'sendCode': 'إرسال رمز التحقق',
+      'changePhone': 'تغيير الرقم',
+      'invalidOtp': 'رمز غير صحيح أو منتهي. اطلب رمزاً جديداً.',
+      'otpTooMany': 'محاولات كثيرة. انتظر ثم حاول مرة أخرى.',
+      'otpSendFailed': 'تعذّر إرسال رمز التحقق. حاول مرة أخرى.',
+      'otpQuota': 'إرسال الرسائل متوقف مؤقتاً. حاول لاحقاً.',
       'signInAction': 'تسجيل الدخول الآن',
       'resendSetupLink': 'إعادة إرسال الرابط',
       'changeEmail': 'تغيير البريد',
@@ -197,6 +216,11 @@ class AppLocalizations {
       'distanceFromStart': 'المسافة من نقطة الانطلاق',
       'lastGps': 'آخر GPS: {gps} • {route} • {vehicle}',
       'offRoute': 'خارج المسار — عُدْ إلى الخط',
+      'navThen': 'ثم {instruction}',
+      'navContinue': 'تابع',
+      'navVoiceUnavailable': 'التوجيه الصوتي غير متاح على هذا الجهاز.',
+      'navMute': 'كتم التوجيه الصوتي',
+      'navUnmute': 'تشغيل التوجيه الصوتي',
       'endTripTitle': 'إنهاء الرحلة؟',
       'endTripMessage':
           'هل أنت متأكّد من إنهاء هذه الرحلة؟ سيتوقّف التتبّع المباشر.',
@@ -290,6 +314,12 @@ class AppLocalizations {
   String get emailHint => _t('emailHint');
   String get passwordHint => _t('passwordHint');
   String get signIn => _t('signIn');
+  String get sendCode => _t('sendCode');
+  String get changePhone => _t('changePhone');
+  String get invalidOtp => _t('invalidOtp');
+  String get otpTooMany => _t('otpTooMany');
+  String get otpSendFailed => _t('otpSendFailed');
+  String get otpQuota => _t('otpQuota');
   String get signInAction => _t('signInAction');
   String get resendSetupLink => _t('resendSetupLink');
   String get changeEmail => _t('changeEmail');
@@ -314,6 +344,12 @@ class AppLocalizations {
   }) =>
       format('lastGps', {'gps': gps, 'route': route, 'vehicle': vehicle});
   String get offRoute => _t('offRoute');
+  String navThen(String instruction) =>
+      format('navThen', {'instruction': instruction});
+  String get navContinue => _t('navContinue');
+  String get navVoiceUnavailable => _t('navVoiceUnavailable');
+  String get navMute => _t('navMute');
+  String get navUnmute => _t('navUnmute');
   String get endTripTitle => _t('endTripTitle');
   String get endTripMessage => _t('endTripMessage');
   String get cancel => _t('cancel');

@@ -13,6 +13,10 @@ class DriverPrefs {
   }
 
   static const _localeKey = 'app_locale_v2';
+  static const _otpPhoneKey = 'driver_otp_phone';
+  static const _otpAtKey = 'driver_otp_saved_at';
+  static const _navVoiceMutedKey = 'nav_voice_muted';
+  static const _navVoiceNoticeKey = 'nav_voice_notice_seen';
 
   String _setupKey(String driverKey) => 'vehicle_setup_done_$driverKey';
   String _vehicleKey(String driverKey) => 'selected_vehicle_$driverKey';
@@ -22,9 +26,53 @@ class DriverPrefs {
     return _prefs!.getString(_localeKey);
   }
 
+  Future<void> savePendingOtp({required String phone}) async {
+    await init();
+    await _prefs!.setString(_otpPhoneKey, phone);
+    await _prefs!.setInt(_otpAtKey, DateTime.now().millisecondsSinceEpoch);
+  }
+
+  Future<String?> getPendingOtpPhone() async {
+    await init();
+    final phone = _prefs!.getString(_otpPhoneKey);
+    final savedAt = _prefs!.getInt(_otpAtKey) ?? 0;
+    if (phone == null || phone.isEmpty) return null;
+    if (DateTime.now().millisecondsSinceEpoch - savedAt > 8 * 60 * 1000) {
+      await clearPendingOtp();
+      return null;
+    }
+    return phone;
+  }
+
+  Future<void> clearPendingOtp() async {
+    await init();
+    await _prefs!.remove(_otpPhoneKey);
+    await _prefs!.remove(_otpAtKey);
+  }
+
   Future<void> saveLocaleCode(String code) async {
     await init();
     await _prefs!.setString(_localeKey, code);
+  }
+
+  Future<bool> isNavVoiceMuted() async {
+    await init();
+    return _prefs!.getBool(_navVoiceMutedKey) ?? false;
+  }
+
+  Future<void> setNavVoiceMuted(bool muted) async {
+    await init();
+    await _prefs!.setBool(_navVoiceMutedKey, muted);
+  }
+
+  Future<bool> hasSeenNavVoiceNotice(String languageCode) async {
+    await init();
+    return _prefs!.getBool('${_navVoiceNoticeKey}_$languageCode') ?? false;
+  }
+
+  Future<void> markNavVoiceNoticeSeen(String languageCode) async {
+    await init();
+    await _prefs!.setBool('${_navVoiceNoticeKey}_$languageCode', true);
   }
 
   static String driverKey({required String phone, required String driverId}) {

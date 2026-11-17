@@ -48,11 +48,25 @@
 		</dict>
 	</dict>
 	<key>GMSApiKey</key>
-	<string>AIzaSyA9F15H3pU03Jq7Fi5LbH-3xbNVRJX6aSA</string>
+	<string>AIzaSyBnTHR_m_rEV0SNhx0qL9L5YdjzPQ0JpZI</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>نحتاج موقعك لعرض الخريطة وتتبع الرحلة.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>نحتاج موقعك لإرسال موقع الباص أثناء الرحلة.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-815276520530-ios-fc62e519d22a82a8351b8b</string>
+				<string>com.tardadi.tardadi.Driver</string>
+			</array>
+		</dict>
+	</array>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

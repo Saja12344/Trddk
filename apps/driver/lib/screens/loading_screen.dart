@@ -20,6 +20,18 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_openIfPendingOtp());
+  }
+
+  Future<void> _openIfPendingOtp() async {
+    final pending = await DriverPrefs.instance.getPendingOtpPhone();
+    if (!mounted || pending == null) return;
+    _openLogin();
+  }
+
   void _openLogin() {
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
