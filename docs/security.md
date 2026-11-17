@@ -20,7 +20,7 @@ TRDDK handles business operations data (routes, drivers, live GPS). Primary risk
 | Admin passwords | Firestore `passwordHash` only | Plaintext anywhere |
 | Firebase Web API keys | Client config (public) | Treat as **restricted**, not secret |
 
-See [SECRET_ROTATION_REQUIRED.md](SECRET_ROTATION_REQUIRED.md) for rotation notes.
+See [secret-rotation.md](secret-rotation.md) for rotation notes.
 
 ## Admin authentication
 
@@ -115,5 +115,5 @@ Do not open public GitHub issues for undisclosed security bugs.
 ## Related
 
 - `apps/admin/SECURITY.md` — Admin-specific BFF notes (may drift; prefer this doc)
-- [ARCHITECTURE.md](ARCHITECTURE.md)
-- [DEPLOYMENT.md](DEPLOYMENT.md)
+- [architecture.md](architecture.md)
+- [deployment.md](deployment.md)

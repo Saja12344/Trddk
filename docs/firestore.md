@@ -107,6 +107,6 @@ Never store plaintext passwords.
 
 ## Related
 
-- [API.md](API.md)
-- [SECURITY.md](SECURITY.md)
-- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [api.md](api.md)
+- [security.md](security.md)
+- [architecture.md](architecture.md)

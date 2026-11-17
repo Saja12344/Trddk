@@ -132,8 +132,8 @@ Server-side geocoding/routing in Admin uses `GOOGLE_MAPS_API_KEY` (`geocode.serv
 
 ## Related docs
 
-- [DEVELOPMENT.md](DEVELOPMENT.md)
-- [API.md](API.md)
-- [FIRESTORE.md](FIRESTORE.md)
-- [SECURITY.md](SECURITY.md)
-- [DEPLOYMENT.md](DEPLOYMENT.md)
+- [setup.md](setup.md)
+- [api.md](api.md)
+- [firestore.md](firestore.md)
+- [security.md](security.md)
+- [deployment.md](deployment.md)

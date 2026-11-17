@@ -4,28 +4,37 @@ Thank you for contributing. This monorepo contains Flutter mobile apps, a Next.j
 
 ## Branch workflow
 
-1. **Do not commit directly to `main`** for feature work.
-2. Create a branch from updated `main`:
-   ```bash
-   git checkout main && git pull
-   git checkout -b feature/short-description
-   ```
-3. Use prefixes:
-   - `feature/` — new functionality
-   - `fix/` — bug fixes
-   - `docs/` — documentation only
-   - `chore/` — tooling, deps, CI
-   - `refactor/` — no behavior change
+`main` is the stable production branch. Do not commit feature work directly to it.
+
+Create a branch from an updated `main`:
+
+```bash
+git checkout main && git pull
+git checkout -b feature/passenger-reminders
+```
+
+Names:
+
+| Pattern | Use |
+|---------|-----|
+| `feature/<app>-<short-desc>` | New behavior. Example: `feature/passenger-reminders` |
+| `fix/<app>-<short-desc>` | A bug fix |
+| `chore/<desc>` | Tooling, dependencies, or repo maintenance |
+| `docs/<desc>` | Documentation only |
+
+`<app>` is one of `admin`, `driver`, `passenger`, `backend`, or `shared`.
+
+Do not put a tool name or a person's name in a branch name.
 
 ## Commits
 
-Prefer [Conventional Commits](https://www.conventionalcommits.org/):
+Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-feat(admin): add business export
-fix(functions): validate trip start payload
-docs: update deployment checklist
+feat(passenger): add route reminders
+fix(admin): keep the session cookie on refresh
 chore: remove tracked tsbuildinfo
+docs: update the deploy checklist
 ```
 
 Keep commits focused. Avoid single massive commits mixing unrelated changes.
@@ -53,14 +62,14 @@ Checklist before requesting review:
 | Flutter apps | `flutter analyze` + `flutter test` |
 | `tardadi_core` | `flutter test` |
 
-CI runs a subset on every PR (`.github/workflows/ci.yml`).
+There is no GitHub Actions workflow in this branch yet. Run the checks in the table above locally.
 
 ## Secrets policy
 
 - **Never** commit passwords, JWT secrets, SMTP credentials, or private keys.
 - Use `.env.example` for documentation; real values in `.env.local` / Secret Manager.
 - Firebase Web API keys may appear in client config — still restrict in Google Cloud Console.
-- If you accidentally commit a secret: rotate it immediately and see [docs/SECRET_ROTATION_REQUIRED.md](docs/SECRET_ROTATION_REQUIRED.md).
+- If you accidentally commit a secret: rotate it immediately and see [docs/secret-rotation.md](docs/secret-rotation.md).
 
 ## Code review focus
 
@@ -83,9 +92,9 @@ CI runs a subset on every PR (`.github/workflows/ci.yml`).
 
 ## Getting help
 
-- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Local setup: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-- Security: [docs/SECURITY.md](docs/SECURITY.md)
+- Architecture: [docs/architecture.md](docs/architecture.md)
+- Local setup: [docs/setup.md](docs/setup.md)
+- Security: [docs/security.md](docs/security.md)
 
 ## License
 

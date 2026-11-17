@@ -1,6 +1,8 @@
 # TRDDK — Bus Tracking Platform
 
-**TRDDK** (product name) is a multi-tenant bus tracking and operations platform. The codebase still uses the legacy identifier **`tardadi`** in package names, bundle IDs, and some paths for backward compatibility — do not rename those without a migration plan.
+**ترددي (TRDDK)** منصة متعددة المستأجرين لتتبّع الباصات وتشغيلها.
+
+**TRDDK** is a multi-tenant bus tracking and operations platform. The codebase still uses the legacy identifier **`tardadi`** in package names, bundle IDs, and some paths for backward compatibility — do not rename those without a migration plan.
 
 ## What this repository contains
 
@@ -77,7 +79,7 @@ packages/
   shared/             # TypeScript shared package (@tardadi/shared)
   tardadi_core/       # Flutter shared package
 scripts/              # Setup, emulators, deploy helpers, seed
-docs/                 # Developer handoff documentation
+docs/                 # Setup, API, deployment, and auth notes
 ```
 
 ## Requirements
@@ -91,7 +93,7 @@ Extracted from project files (verify locally with `node -v`, `flutter --version`
 | Flutter | SDK ^3.11.5 (`apps/*/pubspec.yaml`) |
 | Firebase CLI | Used for emulators, deploy (`firebase-tools` in root devDependencies) |
 | FlutterFire CLI | Optional — `scripts/configure-flutterfire.sh` |
-| Java | 21 recommended for Android builds (see `docs/DEVELOPMENT.md`) |
+| Java | 21 recommended for Android builds (see `docs/setup.md`) |
 | Xcode / CocoaPods | iOS builds (`scripts/setup-ios.sh`) |
 
 ## Quick start (development)
@@ -120,11 +122,11 @@ cd apps/driver && flutter pub get && flutter run
 cd apps/passenger && flutter pub get && flutter run
 ```
 
-See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** for full setup, emulators, and troubleshooting.
+See **[docs/setup.md](docs/setup.md)** for full setup, emulators, and troubleshooting. Android Studio steps are in **[docs/setup-android.md](docs/setup-android.md)**.
 
 ## Environment variables
 
-No real secrets in git. See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** and `apps/admin/.env.example`, `firebase/functions/.env.example`.
+No real secrets in git. See **[docs/setup.md](docs/setup.md)** and `apps/admin/.env.example`, `firebase/functions/.env.example`.
 
 | Variable | Secret? | Local | Production |
 |----------|---------|-------|------------|
@@ -143,9 +145,9 @@ No real secrets in git. See **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** and `
 | Region | `us-central1` |
 | Firestore | `(default)` database |
 | Functions export | Single HTTPS function `api` |
-| Admin deploy target | Firebase **App Hosting** backend `tardadi-admin` (see `docs/DEPLOYMENT.md`) |
+| Admin deploy target | See `docs/deployment.md` and `docs/canonical-deployment.md` |
 
-Details: **[docs/FIRESTORE.md](docs/FIRESTORE.md)**, **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+Details: **[docs/firestore.md](docs/firestore.md)**, **[docs/deployment.md](docs/deployment.md)**.
 
 ## Tests
 
@@ -160,33 +162,52 @@ cd apps/driver && flutter analyze && flutter test
 
 ## Deployment
 
-Do **not** deploy from this handoff branch without review. Summary: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+Summary: **[docs/deployment.md](docs/deployment.md)** and **[docs/canonical-deployment.md](docs/canonical-deployment.md)**.
 
 ## Known issues (verified)
 
 | Issue | Status | Notes |
 |-------|--------|-------|
 | Admin production maps show Carto **"API KEY REQUIRED"** watermark | Open | `NEXT_PUBLIC_GOOGLE_MAPS_*` not set on App Hosting; falls back to Leaflet + Carto tiles |
-| Admin logo missing on some production hosts | Open | Verify `public/icons/tardadi-wordmark.png` is included in App Hosting bundle (`prepare-admin-apphosting.js`) |
+| Admin logo missing on some production hosts | Check | Sidebar uses `public/icons/trddk-wordmark.png` and `public/icons/tardadi-bus-mark.png` |
 | SMTP not configured | Open | Password reset returns server error until SMTP secrets are set |
 | Cloud Run public invoker blocked by org policy | By design | Admin BFF uses service account to call API; browser must not call Cloud Functions directly |
 | Minimal automated test coverage | Open | Only `tardadi_core` has substantive unit tests |
-| No GitHub Actions before handoff PR | Fixed in handoff | See `.github/workflows/ci.yml` |
-| Legacy task markdown (`TASKS-TODAY.md`) | Informational | See `docs/UNCERTAIN_FILES.md` |
+
+## npm scripts
+
+| Script | What it runs |
+|--------|----------------|
+| `npm run build:shared` | Build `@tardadi/shared` |
+| `npm run build:functions` | Build Cloud Functions |
+| `npm run dev:admin` | Next.js admin |
+| `npm run dev:backend` | Local backend |
+| `npm run dev:driver` / `dev:driver:ios` | Driver app on the iOS simulator |
+| `npm run dev:driver:android` | Driver app on Android |
+| `npm run dev:passenger` / `dev:passenger:android` | Passenger app on Android |
+| `npm run dev:passenger:ios` | Passenger app on the iOS simulator |
+| `npm run dev:android:emulator` | Open the Android emulator helper |
+| `npm run setup` | Install JS deps, build shared, and `flutter pub get` |
+| `npm run setup:ios` | iOS setup |
+| `npm run emulators` | Firestore and Functions emulators |
+| `npm run typecheck` | Typecheck workspaces that define the script |
+
+## Branches
+
+`main` is stable. Other branches use `feature/<app>-<short-desc>`, `fix/<app>-<short-desc>`, `chore/<desc>`, or `docs/<desc>`. `<app>` is `admin`, `driver`, `passenger`, `backend`, or `shared`. Details: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## Documentation index
 
+The full list is **[docs/README.md](docs/README.md)**.
+
 | Document | Purpose |
 |----------|---------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, BFF, auth, maps |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Local setup and debugging |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deploy checklist |
-| [docs/SECURITY.md](docs/SECURITY.md) | Secrets, RBAC, rules, threat notes |
-| [docs/API.md](docs/API.md) | HTTP API reference |
-| [docs/FIRESTORE.md](docs/FIRESTORE.md) | Data model |
-| [docs/UNCERTAIN_FILES.md](docs/UNCERTAIN_FILES.md) | Files not deleted pending review |
-| [docs/SECRET_ROTATION_REQUIRED.md](docs/SECRET_ROTATION_REQUIRED.md) | Keys that may need rotation |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, PR, and review rules |
+| [docs/setup.md](docs/setup.md) | Local setup and debugging |
+| [docs/setup-android.md](docs/setup-android.md) | Android emulator setup |
+| [docs/api.md](docs/api.md) | HTTP API reference |
+| [docs/deployment.md](docs/deployment.md) | Deploy checklist |
+| [docs/auth.md](docs/auth.md) | Auth migration |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, commit, and review rules |
 
 ## Mobile bundle IDs (do not change without release plan)
 
