@@ -76,7 +76,7 @@ There is no GitHub Actions workflow in this branch yet. Run the checks in the ta
 - Multi-tenant isolation (`businessId` scoping)
 - Admin BFF allowlist for new proxy paths
 - Firestore rules impact for client-readable collections
-- Mobile bundle IDs unchanged unless explicitly planned
+- iOS bundle IDs are registered in App Store Connect and cannot be changed. Android application IDs stay as they are unless a store listing update is planned.
 - Backward compatibility for API response shapes used by mobile apps
 
 ## Do not change without migration plan
@@ -88,7 +88,7 @@ There is no GitHub Actions workflow in this branch yet. Run the checks in the ta
 ## Naming: TRDDK vs tardadi
 
 - **TRDDK** — product name in user-facing docs and new markdown.
-- **tardadi** — legacy identifiers in package names (`@tardadi/shared`), paths, and mobile bundle IDs. Keep for compatibility.
+- **tardadi** — legacy identifiers in package names (`@tardadi/shared`) and paths. iOS bundle IDs are the App Store Connect values in the README, not names to invent or rename.
 
 ## Getting help
 

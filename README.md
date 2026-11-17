@@ -2,7 +2,7 @@
 
 **ترددي (TRDDK)** منصة متعددة المستأجرين لتتبّع الباصات وتشغيلها.
 
-**TRDDK** is a multi-tenant bus tracking and operations platform. The codebase still uses the legacy identifier **`tardadi`** in package names, bundle IDs, and some paths for backward compatibility — do not rename those without a migration plan.
+**TRDDK** is a multi-tenant bus tracking and operations platform. The codebase still uses the legacy identifier **`tardadi`** in package names and some paths. iOS bundle IDs are registered in App Store Connect and cannot be changed.
 
 ## What this repository contains
 
@@ -209,12 +209,14 @@ The full list is **[docs/README.md](docs/README.md)**.
 | [docs/auth.md](docs/auth.md) | Auth migration |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, commit, and review rules |
 
-## Mobile bundle IDs (do not change without release plan)
+## Mobile bundle IDs
 
 | App | iOS | Android |
 |-----|-----|---------|
-| Passenger | `com.tardadi.tardadiPassenger` | `com.tardadi.tardadi_passenger` |
-| Driver | `com.tardadi.tardadiDriver` | `com.tardadi.tardadi_driver` |
+| Passenger | `com.tardadi.trddk.passenger` | `com.tardadi.tardadi_passenger` |
+| Driver | `com.tardadi.tardadi.Driver` | `com.tardadi.tardadi_driver` |
+
+iOS IDs are registered in App Store Connect and cannot be changed. Each one has its own iOS app in Firebase (project `trddk-54c45`).
 
 ## Support
 

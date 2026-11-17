@@ -118,7 +118,7 @@ Not deployed via Firebase Hosting. Standard store release:
 
 1. Configure signing (Android keystore, iOS certificates).
 2. Build release APK/IPA.
-3. Do **not** change bundle IDs without store listing updates.
+3. Do not change iOS bundle IDs; they are registered in App Store Connect. Do not change Android application IDs without a store listing update. See [release-ios.md](release-ios.md).
 
 Use production API URL via `--dart-define=API_URL=...` at build time.
 

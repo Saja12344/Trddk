@@ -6,6 +6,7 @@
 | [setup-android.md](setup-android.md) | Android Studio, SDK, and emulator |
 | [api.md](api.md) | HTTP API reference |
 | [deployment.md](deployment.md) | Deploy checklist |
+| [release-ios.md](release-ios.md) | iOS bundle IDs and App Store release checklist |
 | [canonical-deployment.md](canonical-deployment.md) | Which admin host is production |
 | [auth.md](auth.md) | Auth migration and current session model |
 | [architecture.md](architecture.md) | System design, BFF, and maps |
