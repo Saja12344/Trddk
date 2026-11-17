@@ -1,9 +1,10 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
+import '../ui/trddk_blur.dart';
+import '../ui/trddk_typography.dart';
 import 'onboarding/onboarding_scale.dart';
 import 'onboarding/onboarding_theme.dart';
 
@@ -57,7 +58,7 @@ class RouteCard extends StatelessWidget {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         textAlign: isRtl ? TextAlign.right : TextAlign.left,
-        style: GoogleFonts.ubuntu(
+        style: TrddkTypography.text(
           fontSize: scale.s(22),
           fontWeight: FontWeight.w700,
           color: OnboardingTheme.routeTitle,
@@ -87,11 +88,11 @@ class RouteCard extends StatelessWidget {
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(OnboardingTheme.figmaCardRadius),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: Container(
+            child: TrddkBlur(
+              sigma: 8,
+              borderRadius:
+                  BorderRadius.circular(OnboardingTheme.figmaCardRadius),
+              child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -183,7 +184,6 @@ class RouteCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
             ),
           ),
         ),
@@ -232,7 +232,7 @@ class _MetaItem extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: OnboardingTheme.routeMeta,
               fontSize: scale.s(12),
               fontWeight: FontWeight.w600,
@@ -326,7 +326,7 @@ class AccountTypeOption extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: GoogleFonts.ubuntu(
+                        style: TrddkTypography.text(
                           color: OnboardingTheme.orange,
                           fontSize: titleSize,
                           fontWeight: FontWeight.w700,
@@ -336,7 +336,7 @@ class AccountTypeOption extends StatelessWidget {
                       SizedBox(height: scale.s(6)),
                       Text(
                         subtitle,
-                        style: GoogleFonts.ubuntu(
+                        style: TrddkTypography.text(
                           color: OnboardingTheme.white.withValues(alpha: 0.58),
                           fontSize: subtitleSize,
                           height: 1.35,
@@ -390,20 +390,28 @@ class LogoWatermark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return const SizedBox.shrink();
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final side = math.min(constraints.maxWidth, constraints.maxHeight) * 1.45;
+        final side =
+            math.min(constraints.maxWidth, constraints.maxHeight) * 0.95;
 
-        return IgnorePointer(
-          child: Align(
-            alignment: alignment,
-            child: Opacity(
-              opacity: opacity,
-              child: Image.asset(
-                'assets/images/logo_icon.png',
-                width: side,
-                height: side,
-                fit: BoxFit.contain,
+        return RepaintBoundary(
+          child: IgnorePointer(
+            child: Align(
+              alignment: alignment,
+              child: Opacity(
+                opacity: opacity,
+                child: Image.asset(
+                  'assets/images/logo_icon.png',
+                  width: side,
+                  height: side,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.low,
+                ),
               ),
             ),
           ),

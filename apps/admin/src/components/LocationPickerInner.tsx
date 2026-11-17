@@ -12,6 +12,9 @@ import L from "leaflet";
 import type { LatLngExpression } from "leaflet";
 import type { LocationPlace } from "@tardadi/shared";
 import "leaflet/dist/leaflet.css";
+import { MAP_TILES } from "@/lib/mapConfig";
+import LocationPickerGoogleMapShell from "@/components/LocationPickerGoogleMap";
+import { isGoogleMapsEnabled } from "@/lib/googleMapsConfig";
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/mapUtils";
 
 const pinIcon = (color: string) =>
@@ -219,35 +222,77 @@ export default function LocationPickerInner({
             <span>اضغط على الخريطة لوضع الدبوس</span>
           </div>
         )}
-        <MapContainer
-          center={position}
-          zoom={value ? 14 : DEFAULT_MAP_ZOOM}
-          scrollWheelZoom
-          style={{ height: 220, width: "100%", borderRadius: 12 }}
-        >
-          <TileLayer
-            attribution='&copy; OpenStreetMap'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        {isGoogleMapsEnabled() ? (
+          <LocationPickerGoogleMapShell
+            pinColor={pinColor}
+            value={value}
+            onPick={handleMapPick}
+            onDrag={(lat, lng) => void reverseGeocode(lat, lng)}
+            fallback={
+              <MapContainer
+                center={position}
+                zoom={value ? 14 : DEFAULT_MAP_ZOOM}
+                scrollWheelZoom
+                style={{ height: 220, width: "100%", borderRadius: 12 }}
+              >
+                <TileLayer
+                  attribution={MAP_TILES.attribution}
+                  url={MAP_TILES.url}
+                  subdomains={MAP_TILES.subdomains}
+                />
+                <MapClickHandler onPick={handleMapPick} />
+                {value && (
+                  <>
+                    <FlyTo position={position} />
+                    <Marker
+                      position={position}
+                      icon={pinIcon(pinColor)}
+                      draggable
+                      eventHandlers={{
+                        dragend(event) {
+                          const marker = event.target;
+                          const { lat, lng } = marker.getLatLng();
+                          void reverseGeocode(lat, lng);
+                        },
+                      }}
+                    />
+                  </>
+                )}
+              </MapContainer>
+            }
           />
-          <MapClickHandler onPick={handleMapPick} />
-          {value && (
-            <>
-              <FlyTo position={position} />
-              <Marker
-                position={position}
-                icon={pinIcon(pinColor)}
-                draggable
-                eventHandlers={{
-                  dragend(event) {
-                    const marker = event.target;
-                    const { lat, lng } = marker.getLatLng();
-                    void reverseGeocode(lat, lng);
-                  },
-                }}
-              />
-            </>
-          )}
-        </MapContainer>
+        ) : (
+          <MapContainer
+            center={position}
+            zoom={value ? 14 : DEFAULT_MAP_ZOOM}
+            scrollWheelZoom
+            style={{ height: 220, width: "100%", borderRadius: 12 }}
+          >
+            <TileLayer
+              attribution={MAP_TILES.attribution}
+              url={MAP_TILES.url}
+              subdomains={MAP_TILES.subdomains}
+            />
+            <MapClickHandler onPick={handleMapPick} />
+            {value && (
+              <>
+                <FlyTo position={position} />
+                <Marker
+                  position={position}
+                  icon={pinIcon(pinColor)}
+                  draggable
+                  eventHandlers={{
+                    dragend(event) {
+                      const marker = event.target;
+                      const { lat, lng } = marker.getLatLng();
+                      void reverseGeocode(lat, lng);
+                    },
+                  }}
+                />
+              </>
+            )}
+          </MapContainer>
+        )}
       </div>
 
       {value && (

@@ -1,9 +1,9 @@
-/** Modern dark map tiles — matches admin UI (Carto Dark Matter). */
+/** OSM tiles with dark styling applied in CSS (see globals.css .map-container). */
 export const MAP_TILES = {
-  url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
   attribution:
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  subdomains: "abcd",
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  subdomains: "abc",
 } as const;
 
 export const ROUTE_LINE = {

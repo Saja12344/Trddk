@@ -1,7 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tardadi_core/tardadi_core.dart';
+
+import '../services/passenger_api.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/firebase_auth_service.dart';
+import '../services/passenger_phone_login.dart';
+import '../services/store_review.dart';
 import '../services/user_session.dart';
 import '../widgets/onboarding/onboarding_scale.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
@@ -9,9 +17,7 @@ import '../widgets/onboarding/verification_header.dart';
 import 'verify_phone_screen.dart';
 
 class EnterPhoneScreen extends StatefulWidget {
-  const EnterPhoneScreen({super.key, this.fromSettings = false});
-
-  final bool fromSettings;
+  const EnterPhoneScreen({super.key});
 
   @override
   State<EnterPhoneScreen> createState() => _EnterPhoneScreenState();
@@ -19,14 +25,28 @@ class EnterPhoneScreen extends StatefulWidget {
 
 class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
   final _phoneController = TextEditingController();
+  final _codeController = TextEditingController(text: '+966');
   final _phoneFocusNode = FocusNode();
   String? _error;
+  var _sending = false;
 
-  bool get _isValid => _phoneController.text.trim().length >= 9;
+  String get _codeDigits =>
+      _codeController.text.replaceAll(RegExp(r'\D'), '');
+
+  /// National number without a leading 0 (05XXXXXXXX -> 5XXXXXXXX).
+  String get _nationalDigits => _phoneController.text
+      .replaceAll(RegExp(r'\D'), '')
+      .replaceFirst(RegExp(r'^0+'), '');
+
+  bool get _isSaudi => _codeDigits == '966';
+
+  bool get _isValid => _codeDigits.isNotEmpty &&
+      (_isSaudi ? _nationalDigits.length == 9 : _nationalDigits.length >= 6);
 
   @override
   void dispose() {
     _phoneController.dispose();
+    _codeController.dispose();
     _phoneFocusNode.dispose();
     super.dispose();
   }
@@ -35,19 +55,109 @@ class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
     Navigator.of(context).pop();
   }
 
-  void _continue() {
-    final digits = _phoneController.text.trim();
-    if (digits.length < 9) {
-      setState(() => _error = context.l10n.invalidPhone);
+  Future<void> _continue() async {
+    final digits = _nationalDigits;
+    if (!_isValid || _sending) {
+      if (!_isValid) {
+        setState(() => _error = context.l10n.invalidPhone);
+      }
       return;
     }
 
-    UserSession.instance.setPhoneNumber('+966$digits');
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => VerifyPhoneScreen(fromSettings: widget.fromSettings),
-      ),
+    final phone = '+$_codeDigits$digits';
+    if (_isSaudi && isPassengerStoreReviewPhone(digits)) {
+      UserSession.instance.setPhoneNumber(phone);
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const VerifyPhoneScreen(),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    lastPlayServicesPhoneAuthError = null;
+    try {
+      final verificationId = await _sendFirebaseSms(phone);
+      if (!mounted) return;
+      UserSession.instance.setPhoneNumber(phone);
+      if (verificationId == 'AUTO') {
+        await openPassengerBusinessSession(context, phone: phone);
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => VerifyPhoneScreen(
+            phone: phone,
+            verificationId: verificationId,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final playServicesMissing = !await googlePlayServicesAvailable();
+      if (!mounted) return;
+      if (playServicesMissing && isPlayServicesPhoneAuthFailure(error)) {
+        lastPlayServicesPhoneAuthError = error;
+        try {
+          await createPassengerApi().passengerStartPhoneLogin(phone: phone);
+          if (!mounted) return;
+          UserSession.instance.setPhoneNumber(phone);
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => VerifyPhoneScreen(phone: phone, serverOtp: true),
+            ),
+          );
+          return;
+        } catch (serverError) {
+          if (!mounted) return;
+          setState(() => _error = _smsError(serverError));
+          return;
+        }
+      }
+      lastPlayServicesPhoneAuthError = null;
+      setState(() => _error = _smsError(error));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<String> _sendFirebaseSms(String phone) {
+    final done = Completer<String>();
+    PassengerFirebaseAuth.instance.verifyPhoneNumber(
+      phone: phone,
+      verificationCompleted: (credential) async {
+        try {
+          await PassengerFirebaseAuth.instance.signInWithCredential(credential);
+          if (!done.isCompleted) done.complete('AUTO');
+        } catch (error) {
+          if (!done.isCompleted) done.completeError(error);
+        }
+      },
+      verificationFailed: (error) {
+        if (!done.isCompleted) done.completeError(error);
+      },
+      codeSent: (verificationId, _) {
+        if (!done.isCompleted) done.complete(verificationId);
+      },
+      codeAutoRetrievalTimeout: (_) {},
     );
+    return done.future.timeout(
+      const Duration(seconds: 90),
+      onTimeout: () {
+        if (!mounted) {
+          throw Exception('Could not send the verification code. Try again.');
+        }
+        throw Exception('${context.l10n.otpSendFailed}\n(timeout)');
+      },
+    );
+  }
+
+  String _smsError(Object error) {
+    return passengerSmsError(error, context.l10n);
   }
 
   @override
@@ -105,22 +215,44 @@ class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
                       textDirection: TextDirection.ltr,
                       child: Row(
                         children: [
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: scale.s(14),
-                              vertical: scale.s(16),
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF5F6FA),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.black26),
-                            ),
-                            child: Text(
-                              '+966',
+                          SizedBox(
+                            width: scale.s(84),
+                            child: TextField(
+                              controller: _codeController,
+                              keyboardType: TextInputType.phone,
+                              textAlign: TextAlign.center,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9+]'),
+                                ),
+                                LengthLimitingTextInputFormatter(5),
+                              ],
+                              onChanged: (_) => setState(() => _error = null),
                               style: TextStyle(
                                 color: OnboardingTheme.routeTitle,
                                 fontSize: scale.s(16),
                                 fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: const Color(0xFFF5F6FA),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: scale.s(8),
+                                  vertical: scale.s(16),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide:
+                                      const BorderSide(color: Colors.black26),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: Colors.black,
+                                    width: 1.5,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -133,7 +265,7 @@ class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
                               textInputAction: TextInputAction.done,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(9),
+                                LengthLimitingTextInputFormatter(14),
                               ],
                               onChanged: (_) => setState(() => _error = null),
                               style: TextStyle(
@@ -189,12 +321,16 @@ class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
                       ),
                     ],
                     const Spacer(),
-                    Text(
-                      l10n.contactSupport,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: OnboardingTheme.routeMeta,
-                        fontSize: scale.s(13),
+                    TextButton(
+                      onPressed: () => openTardadiSupportEmail(),
+                      child: Text(
+                        l10n.contactSupport,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: OnboardingTheme.routeMeta,
+                          fontSize: scale.s(13),
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                     ),
                     SizedBox(height: scale.s(16)),
@@ -212,7 +348,7 @@ class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isValid ? _continue : null,
+                  onPressed: _isValid && !_sending ? _continue : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: OnboardingTheme.orange,
                     foregroundColor: OnboardingTheme.white,
@@ -225,7 +361,7 @@ class _EnterPhoneScreenState extends State<EnterPhoneScreen> {
                     ),
                   ),
                   child: Text(
-                    l10n.next,
+                    _sending ? '...' : l10n.next,
                     style: TextStyle(
                       fontSize: scale.buttonFontSize,
                       fontWeight: FontWeight.w700,

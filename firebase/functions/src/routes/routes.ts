@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { COLLECTIONS, totalStationCount } from "@tardadi/shared";
 import { db } from "../firebase";
-import { optionalAdminWithPermission } from "../auth/middleware";
+import { optionalAdminWithPermission, requirePermission } from "../auth/middleware";
+import { ROUTE_WRITE_FIELDS, pickAllowedFields } from "../auth/driverAccess";
 import { resolveBusinessId, requireBusinessId, withBusinessId } from "../auth/scope";
 import {
   listAccessibleBusinessIds,
@@ -9,8 +10,24 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import { withTranslatedNames } from "../services/translate";
+import {
+  isPublicPassengerRoute,
+  omitReviewPrivateFields,
+  rejectStoreReviewAccess,
+  requestIsPassengerReview,
+  STORE_REVIEW_FORBIDDEN,
+} from "../services/passengerReview";
 
 const router = Router();
+
+router.use((req, res, next) => {
+  if (req.method === "GET") {
+    next();
+    return;
+  }
+  rejectStoreReviewAccess(req, res, next);
+});
 
 const LIVE_GPS_WINDOW_MS = 60_000;
 
@@ -52,7 +69,9 @@ async function listRoutesForBusiness(businessId: string) {
       let liveBusCount = 0;
 
       for (const tripDoc of activeTrips) {
-        const busId = tripDoc.data().busId as string;
+        const trip = tripDoc.data();
+        if (trip.onBreak === true) continue;
+        const busId = trip.busId as string;
         const bus = busById.get(busId);
         if (bus && isRecentlyUpdated(bus.lastSeenAt as string | undefined)) {
           liveBusCount += 1;
@@ -79,6 +98,31 @@ async function listRoutesForBusiness(businessId: string) {
 
 router.get("/", optionalAdminWithPermission("routes:read"), async (req, res) => {
   try {
+    const scope = req.query.scope as string | undefined;
+    const review = requestIsPassengerReview(req);
+
+    // Personal passengers and the store-review session only see public routes.
+    if (review || (!req.adminAuth && scope === "public")) {
+      const snap = await db.collection(COLLECTIONS.businesses).get();
+      const businessIds = snap.docs.map((doc) => doc.id);
+      const routes = await mapAcrossBusinesses(db, businessIds, listRoutesForBusiness);
+      ok(
+        res,
+        await withTranslatedNames(
+          routes
+            .filter((route) =>
+              isPublicPassengerRoute(route as { status?: string; accessMode?: string })
+            )
+            .map((route) =>
+              review
+                ? omitReviewPrivateFields(route as Record<string, unknown>)
+                : (route as Record<string, unknown>)
+            )
+        )
+      );
+      return;
+    }
+
     const businessId = resolveBusinessId(req, req.adminAuth);
     const businessIds = await listAccessibleBusinessIds(
       db,
@@ -86,7 +130,7 @@ router.get("/", optionalAdminWithPermission("routes:read"), async (req, res) => 
       businessId
     );
     const routes = await mapAcrossBusinesses(db, businessIds, listRoutesForBusiness);
-    ok(res, routes);
+    ok(res, await withTranslatedNames(routes as Record<string, unknown>[]));
   } catch (error) {
     const err = error as Error & { status?: number };
     fail(res, err.message, err.status ?? 500);
@@ -105,6 +149,16 @@ router.get("/:routeId/live", async (req, res) => {
     const routeDoc = await routeRef.get();
     if (!routeDoc.exists) {
       fail(res, "Route not found", 404);
+      return;
+    }
+
+    const review = requestIsPassengerReview(req);
+    const routeData = routeDoc.data() ?? {};
+    if (
+      review &&
+      !isPublicPassengerRoute(routeData as { status?: string; accessMode?: string })
+    ) {
+      fail(res, STORE_REVIEW_FORBIDDEN, 403);
       return;
     }
 
@@ -128,6 +182,8 @@ router.get("/:routeId/live", async (req, res) => {
 
     for (const tripDoc of tripsSnapshot.docs) {
       const trip = tripDoc.data();
+      if (trip.onBreak === true) continue;
+
       const busDoc = await businessRef(db, businessId)
         .collection(COLLECTIONS.buses)
         .doc(trip.busId as string)
@@ -139,7 +195,7 @@ router.get("/:routeId/live", async (req, res) => {
       const isLive = isRecentlyUpdated(busData.lastSeenAt as string | undefined);
       if (isLive) liveBusCount += 1;
 
-      buses.push({
+      const busPayload = {
         ...withBusinessId(businessId, { busId: busDoc.id, ...busData }),
         tripId: tripDoc.id,
         lastArrivedAt:
@@ -151,20 +207,26 @@ router.get("/:routeId/live", async (req, res) => {
           (busData.lastArrivedStopId as string | undefined) ??
           null,
         isLive,
-      });
+      };
+      buses.push(review ? omitReviewPrivateFields(busPayload) : busPayload);
     }
 
-    ok(res, {
-      route: withBusinessId(businessId, {
-        routeId,
-        ...routeDoc.data(),
-        stopsCount: totalStationCount(stops.length, {
-          hasFrom: !!routeDoc.data()?.fromLocation,
-          hasTo: !!routeDoc.data()?.toLocation,
-        }),
-        intermediateStopsCount: stops.length,
+    const routePayload = withBusinessId(businessId, {
+      routeId,
+      ...routeData,
+      stopsCount: totalStationCount(stops.length, {
+        hasFrom: !!routeData.fromLocation,
+        hasTo: !!routeData.toLocation,
       }),
-      stops,
+      intermediateStopsCount: stops.length,
+    });
+
+    const [translatedRoute] = await withTranslatedNames([
+      (review ? omitReviewPrivateFields(routePayload) : routePayload) as Record<string, unknown>,
+    ]);
+    ok(res, {
+      route: translatedRoute,
+      stops: await withTranslatedNames(stops as Record<string, unknown>[]),
       buses,
       liveBusCount,
       activeBusCount: tripsSnapshot.size,
@@ -201,19 +263,31 @@ router.get("/:routeId", optionalAdminWithPermission("routes:read"), async (req, 
     }));
 
     const routeData = routeDoc.data()!;
+    const review = requestIsPassengerReview(req);
+    if (
+      review &&
+      !isPublicPassengerRoute(routeData as { status?: string; accessMode?: string })
+    ) {
+      fail(res, STORE_REVIEW_FORBIDDEN, 403);
+      return;
+    }
     const intermediateStops = stopsSnapshot.size;
-
-    ok(res, {
-      route: withBusinessId(businessId, {
-        routeId,
-        ...routeData,
-        stopsCount: totalStationCount(intermediateStops, {
-          hasFrom: !!routeData.fromLocation,
-          hasTo: !!routeData.toLocation,
-        }),
-        intermediateStopsCount: intermediateStops,
+    const routePayload = withBusinessId(businessId, {
+      routeId,
+      ...routeData,
+      stopsCount: totalStationCount(intermediateStops, {
+        hasFrom: !!routeData.fromLocation,
+        hasTo: !!routeData.toLocation,
       }),
-      stops,
+      intermediateStopsCount: intermediateStops,
+    });
+
+    const [translatedRoute] = await withTranslatedNames([
+      (review ? omitReviewPrivateFields(routePayload) : routePayload) as Record<string, unknown>,
+    ]);
+    ok(res, {
+      route: translatedRoute,
+      stops: await withTranslatedNames(stops as Record<string, unknown>[]),
     });
   } catch (error) {
     const err = error as Error & { status?: number };
@@ -221,7 +295,7 @@ router.get("/:routeId", optionalAdminWithPermission("routes:read"), async (req, 
   }
 });
 
-router.post("/", optionalAdminWithPermission("routes:write"), async (req, res) => {
+router.post("/", requirePermission("routes:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const {
@@ -319,14 +393,14 @@ router.post("/", optionalAdminWithPermission("routes:write"), async (req, res) =
   }
 });
 
-router.put("/:routeId", optionalAdminWithPermission("routes:write"), async (req, res) => {
+router.put("/:routeId", requirePermission("routes:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const routeId = paramId(req.params.routeId);
-    const updates = { ...req.body, updatedAt: new Date().toISOString() };
-    delete updates.organizationId;
-    delete updates.businessId;
-    delete updates.routeId;
+    const updates = {
+      ...pickAllowedFields(req.body ?? {}, ROUTE_WRITE_FIELDS),
+      updatedAt: new Date().toISOString(),
+    };
 
     await businessRef(db, businessId)
       .collection(COLLECTIONS.routes)
@@ -340,7 +414,7 @@ router.put("/:routeId", optionalAdminWithPermission("routes:write"), async (req,
   }
 });
 
-router.delete("/:routeId", optionalAdminWithPermission("routes:write"), async (req, res) => {
+router.delete("/:routeId", requirePermission("routes:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const routeId = paramId(req.params.routeId);

@@ -24,6 +24,7 @@ export interface JwtPayload {
   businessId: string | null;
   name: string;
   phone: string;
+  mfa?: string;
   iat: number;
   exp: number;
 }
@@ -78,10 +79,20 @@ export function verifyJwt(token: string, secret: string): JwtPayload | null {
   }
 }
 
+const INSECURE_JWT_SECRETS = new Set([
+  "tardadi-dev-jwt-secret-change-in-production",
+]);
+
+export function assertJwtSecret(secret: string | undefined): string {
+  const value = secret?.trim() ?? "";
+  if (value.length < 32 || INSECURE_JWT_SECRETS.has(value)) {
+    throw new Error("ADMIN_JWT_SECRET is missing or unsafe.");
+  }
+  return value;
+}
+
 export function getJwtSecret(): string {
-  return (
-    process.env.ADMIN_JWT_SECRET ||
-    process.env.ADMIN_API_TOKEN ||
-    "tardadi-dev-jwt-secret-change-in-production"
+  return assertJwtSecret(
+    process.env.ADMIN_JWT_SECRET || process.env.ADMIN_API_TOKEN
   );
 }

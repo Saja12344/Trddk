@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { LocationPlace } from "@tardadi/shared";
+import { getSession } from "@/lib/auth.server";
 import { encodePolyline, fetchRoadRoute } from "@/lib/routing.server";
 
 function parsePlace(raw: unknown, label: string): LocationPlace | null {
@@ -21,6 +22,11 @@ function parsePlace(raw: unknown, label: string): LocationPlace | null {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "يجب تسجيل الدخول." }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

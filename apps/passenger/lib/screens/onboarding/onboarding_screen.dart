@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/app_permissions.dart';
+import '../../services/user_session.dart';
 import '../account_type_screen.dart';
 import '../../widgets/onboarding/onboarding_feature_preview_card.dart';
 import '../../widgets/onboarding/onboarding_primary_button.dart';
 import '../../widgets/onboarding/onboarding_scale.dart';
 import '../../widgets/onboarding/onboarding_theme.dart';
 import '../../widgets/onboarding/onboarding_typography.dart';
+import '../../widgets/onboarding/tardadi_logo.dart';
 import '../../widgets/onboarding/previews/home_screen_preview.dart';
 import '../../widgets/onboarding/previews/tracking_screen_preview.dart';
 
@@ -31,9 +33,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _finishOnboarding({required bool requestLocation}) async {
-    await AppPermissions.requestOnboardingPermissions(
-      requestLocation: requestLocation,
-    );
+    // Save first, so onboarding never shows again even if a permission
+    // prompt fails on some devices.
+    await UserSession.instance.markOnboardingCompleted();
+    try {
+      await AppPermissions.requestOnboardingPermissions(
+        requestLocation: requestLocation,
+      );
+    } catch (error) {
+      debugPrint('Onboarding permissions failed: $error');
+    }
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(builder: (_) => const AccountTypeScreen()),
@@ -90,10 +99,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Column(
             children: [
                   SizedBox(height: scale.s(16)),
-                  _OnboardingHeader(
-                    scale: scale,
-                    tagline: l10n.onboardingTagline,
-                  ),
+                  _OnboardingHeader(scale: scale),
                   SizedBox(height: scale.s(20)),
                   Expanded(
                     child: Column(
@@ -164,36 +170,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _OnboardingHeader extends StatelessWidget {
-  const _OnboardingHeader({
-    required this.scale,
-    required this.tagline,
-  });
+  const _OnboardingHeader({required this.scale});
 
   final OnboardingScale scale;
-  final String tagline;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Image.asset(
-          'assets/images/logo_full.png',
-          height: scale.s(44),
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
-        ),
-        SizedBox(height: scale.s(8)),
-        Text(
-          tagline,
-          textAlign: TextAlign.center,
-          style: OnboardingTypography.body(
-            fontSize: scale.onboardingTaglineSize,
-            fontWeight: FontWeight.w500,
-            color: OnboardingTheme.muted,
-            letterSpacing: 0.3,
-          ),
-        ),
-      ],
+    return Center(
+      child: TrddkWordmark(height: scale.s(32)),
     );
   }
 }

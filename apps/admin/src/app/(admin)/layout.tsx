@@ -1,16 +1,17 @@
-"use client";
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import AdminAppShell from "@/components/AdminAppShell";
+import { getSession } from "@/lib/auth.server";
+import { noIndexMetadata } from "@/lib/seo";
 
-import AdminShell from "@/components/AdminShell";
-import { AuthProvider } from "@/components/AuthProvider";
+export const metadata: Metadata = noIndexMetadata;
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <AuthProvider>
-      <AdminShell>{children}</AdminShell>
-    </AuthProvider>
-  );
+  const session = await getSession();
+  if (!session) redirect("/login");
+  return <AdminAppShell>{children}</AdminAppShell>;
 }

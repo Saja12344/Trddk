@@ -1,12 +1,15 @@
-import 'dart:ui';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
+import '../debug/startup_timeline.dart';
 import '../l10n/app_localizations.dart';
 import '../models/route_list_item.dart';
 import '../services/passenger_api.dart';
 import '../services/user_session.dart';
+import '../ui/trddk_blur.dart';
+import '../ui/trddk_typography.dart';
+import '../widgets/onboarding/tardadi_logo.dart';
 import '../widgets/onboarding/onboarding_scale.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/route_card.dart';
@@ -29,15 +32,18 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
   var _loading = true;
   String? _loadError;
   String _query = '';
+  var _buildCount = 0;
 
   @override
   void initState() {
     super.initState();
+    StartupTimeline.mark('routes_init_state', event: 'start');
     WidgetsBinding.instance.addObserver(this);
-    _loadRoutes();
+    unawaited(_loadRoutes());
     _searchController.addListener(() {
       setState(() => _query = _searchController.text.trim().toLowerCase());
     });
+    StartupTimeline.mark('routes_init_state', event: 'end');
   }
 
   @override
@@ -55,22 +61,51 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
   }
 
   Future<void> _loadRoutes({bool silent = false}) async {
+    StartupTimeline.mark(
+      'get_routes',
+      event: 'start',
+      detail: 'silent=$silent',
+    );
+    final sw = Stopwatch()..start();
     try {
       if (!silent && mounted) setState(() => _loading = true);
-      final apiRoutes = await _api.getRoutes();
-      if (!mounted) return;
+      final apiRoutes = await _api.getRoutes(
+        publicScope: !UserSession.instance.hasBusinessSession,
+      );
+      StartupTimeline.mark(
+        'get_routes_api',
+        event: 'end',
+        durationMs: sw.elapsedMilliseconds,
+        detail: 'count=${apiRoutes.length}',
+      );
 
+      final parseSw = Stopwatch()..start();
       final activeRoutes = apiRoutes
           .where((route) => route.status == 'active')
           .map((route) => RouteListItem.fromRoute(route))
           .toList()
         ..sort((a, b) => a.name.compareTo(b.name));
+      parseSw.stop();
+      StartupTimeline.mark(
+        'routes_parse_sort',
+        event: 'end',
+        durationMs: parseSw.elapsedMilliseconds,
+        detail: 'active=${activeRoutes.length}',
+      );
+
+      if (!mounted) return;
 
       setState(() {
         _routes = activeRoutes;
         _loadError = null;
         _loading = false;
       });
+      StartupTimeline.mark(
+        'get_routes',
+        event: 'end',
+        durationMs: sw.elapsedMilliseconds,
+        detail: 'success active=${activeRoutes.length}',
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -78,6 +113,12 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
         _loadError = error.toString();
         _loading = false;
       });
+      StartupTimeline.mark(
+        'get_routes',
+        event: 'end',
+        durationMs: sw.elapsedMilliseconds,
+        detail: 'error=$error',
+      );
     }
   }
 
@@ -85,7 +126,14 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
     if (_query.isEmpty) return _routes;
     final l10n = context.l10n;
     return _routes
-        .where((route) => l10n.routeNameMatchesQuery(route.name, _query))
+        .where(
+          (route) =>
+              l10n.routeNameMatchesQuery(route.name, _query) ||
+              l10n
+                  .routeDisplayName(route)
+                  .toLowerCase()
+                  .contains(_query.toLowerCase()),
+        )
         .toList();
   }
 
@@ -94,6 +142,11 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
 
   List<RouteListItem> get _publicRoutes =>
       _filteredRoutes.where((route) => !route.isBusiness).toList();
+
+  bool _hasVisibleRouteCards(bool showBusiness) =>
+      (showBusiness && _businessRoutes.isNotEmpty) ||
+      _publicRoutes.isNotEmpty ||
+      (!showBusiness && _businessRoutes.isNotEmpty);
 
   void _openRoute(RouteListItem route) {
     Navigator.of(context).push(
@@ -109,9 +162,40 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
 
   @override
   Widget build(BuildContext context) {
+    _buildCount++;
+    if (_buildCount == 1) {
+      StartupTimeline.mark('routes_first_build', event: 'start');
+    }
+
+    final scaleSw = Stopwatch()..start();
     final scale = OnboardingScale(context);
+    scaleSw.stop();
+    if (_buildCount == 1) {
+      StartupTimeline.mark(
+        'routes_onboarding_scale',
+        event: 'end',
+        durationMs: scaleSw.elapsedMilliseconds,
+      );
+    }
+
+    final filterSw = Stopwatch()..start();
     final showBusiness = UserSession.instance.isBusiness;
     final l10n = context.l10n;
+    final hasVisibleRouteCards = _hasVisibleRouteCards(showBusiness);
+    filterSw.stop();
+    if (_buildCount == 1) {
+      StartupTimeline.mark(
+        'routes_filter_lists',
+        event: 'end',
+        durationMs: filterSw.elapsedMilliseconds,
+        detail:
+            'routes=${_routes.length} business=${_businessRoutes.length} public=${_publicRoutes.length}',
+      );
+      StartupTimeline.schedulePostFrame(
+        'routes_first_build',
+        detail: 'routes frame complete loading=$_loading',
+      );
+    }
 
     return Scaffold(
       backgroundColor: OnboardingTheme.background,
@@ -123,7 +207,6 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
               children: [
                 _RoutesHeader(
                   scale: scale,
-                  title: l10n.appName,
                   onMenuTap: _openSettings,
                 ),
                 Padding(
@@ -177,8 +260,13 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
                                   ..._publicRoutes.map(
                                     (route) => _buildRouteCard(route, l10n),
                                   ),
+                                ] else if (!showBusiness &&
+                                    _businessRoutes.isNotEmpty) ...[
+                                  ..._businessRoutes.map(
+                                    (route) => _buildRouteCard(route, l10n),
+                                  ),
                                 ],
-                                if (_filteredRoutes.isEmpty)
+                                if (!hasVisibleRouteCards)
                                   Padding(
                                     padding: EdgeInsets.only(top: scale.s(56)),
                                     child: Column(
@@ -192,7 +280,7 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
                                         SizedBox(height: scale.s(12)),
                                         Text(
                                           l10n.noRoutesFound,
-                                          style: GoogleFonts.ubuntu(
+                                          style: TrddkTypography.text(
                                             color: OnboardingTheme.muted,
                                             fontSize: scale.s(15),
                                             fontWeight: FontWeight.w500,
@@ -215,7 +303,7 @@ class _RoutesMainScreenState extends State<RoutesMainScreen>
 
   Widget _buildRouteCard(RouteListItem route, AppLocalizations l10n) {
     return RouteCard(
-      name: l10n.localizeRouteName(route.name),
+      name: l10n.routeDisplayName(route),
       frequencyLabel: l10n.localizeMetaLabel(route.frequencyLabel),
       busCountLabel: l10n.localizeMetaLabel(route.busCountLabel),
       stationsCountLabel: l10n.localizeMetaLabel(route.stationsCountLabel),
@@ -248,12 +336,10 @@ class _ErrorState extends StatelessWidget {
 class _RoutesHeader extends StatelessWidget {
   const _RoutesHeader({
     required this.scale,
-    required this.title,
     required this.onMenuTap,
   });
 
   final OnboardingScale scale;
-  final String title;
   final VoidCallback onMenuTap;
 
   @override
@@ -262,7 +348,7 @@ class _RoutesHeader extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
         scale.horizontalPadding,
         scale.s(8),
-        scale.s(8),
+        scale.horizontalPadding,
         0,
       ),
       child: SizedBox(
@@ -279,15 +365,7 @@ class _RoutesHeader extends StatelessWidget {
                 fit: BoxFit.contain,
               ),
             ),
-            Text(
-              title,
-              style: GoogleFonts.ubuntu(
-                color: OnboardingTheme.white,
-                fontSize: scale.s(28),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
-            ),
+            TrddkWordmark(height: scale.s(28)),
             Align(
               alignment: AlignmentDirectional.centerEnd,
               child: Material(
@@ -327,11 +405,10 @@ class _SearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
 
-    return ClipRRect(
+    return TrddkBlur(
+      sigma: 12,
       borderRadius: BorderRadius.circular(50),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
+      child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -355,14 +432,14 @@ class _SearchBar extends StatelessWidget {
           ),
           child: TextField(
             controller: controller,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: OnboardingTheme.white,
               fontSize: scale.s(15),
               fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
               hintText: l10n.stationSearchHint,
-              hintStyle: GoogleFonts.ubuntu(
+              hintStyle: TrddkTypography.text(
                 color: OnboardingTheme.white.withValues(alpha: 0.52),
                 fontSize: scale.s(15),
                 fontWeight: FontWeight.w400,
@@ -394,7 +471,6 @@ class _SearchBar extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -425,7 +501,7 @@ class _SectionHeader extends StatelessWidget {
           SizedBox(width: scale.s(10)),
           Text(
             title,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: OnboardingTheme.white,
               fontSize: scale.s(22),
               fontWeight: FontWeight.w700,

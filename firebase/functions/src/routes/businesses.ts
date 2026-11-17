@@ -1,30 +1,50 @@
 import { Router } from "express";
 import {
   COLLECTIONS,
-  normalizePhone,
   type Business,
   type BusinessListItem,
   type BusinessStats,
   type CreateBusinessRequest,
   type UpdateBusinessRequest,
 } from "@tardadi/shared";
+import type { DocumentData } from "firebase-admin/firestore";
 import { db } from "../firebase";
-import { hashPassword } from "../auth/crypto";
 import {
   requirePermission,
   requireSuperAdmin,
 } from "../auth/middleware";
 import { businessRef, getBusinessStats } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import {
+  listBusinessEmployees,
+  removeEmployeeFromBusiness,
+  updateEmployeeMembership,
+} from "../services/employees";
+import { normalizeEmail, sendPasswordSetupLink } from "../services/users";
+import {
+  loadCompanyManagerSummary,
+  migrateLegacyManagerEmail,
+  provisionCompanyManager,
+  replaceCompanyManager,
+  sendCompanyManagerInvite,
+} from "../services/companyManager";
 
 const router = Router();
 
-async function loadAdminSummary(adminUserId: string | null | undefined) {
-  if (!adminUserId) return { adminName: null, adminPhone: null };
-  const doc = await db.collection(COLLECTIONS.adminUsers).doc(adminUserId).get();
-  if (!doc.exists) return { adminName: null, adminPhone: null };
-  const data = doc.data()!;
-  return { adminName: data.name as string, adminPhone: data.phone as string };
+async function loadAdminSummary(
+  businessId: string,
+  data: DocumentData
+) {
+  const manager = await loadCompanyManagerSummary(businessId, data);
+  return {
+    adminName: manager.name,
+    adminPhone: manager.phone,
+    adminEmail: manager.email,
+  };
+}
+
+function inviterUid(req: { adminAuth?: { firebaseUser?: { uid: string }; userId: string } | null }) {
+  return req.adminAuth?.firebaseUser?.uid ?? req.adminAuth?.userId ?? "system";
 }
 
 router.get(
@@ -39,7 +59,7 @@ router.get(
           const businessId = doc.id;
           const [stats, admin] = await Promise.all([
             getBusinessStats(db, businessId),
-            loadAdminSummary(data.adminUserId as string | undefined),
+            loadAdminSummary(businessId, data),
           ]);
 
           return {
@@ -89,8 +109,11 @@ router.get(
       }
 
       const data = doc.data()!;
-      const admin = await loadAdminSummary(data.adminUserId as string | undefined);
-      const stats = await getBusinessStats(db, businessId);
+      const [admin, stats, manager] = await Promise.all([
+        loadAdminSummary(businessId, data),
+        getBusinessStats(db, businessId),
+        loadCompanyManagerSummary(businessId, data),
+      ]);
 
       ok(res, {
         businessId,
@@ -101,6 +124,7 @@ router.get(
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
         ...admin,
+        manager,
         stats,
       });
     } catch (error) {
@@ -147,56 +171,76 @@ router.post("/", requireSuperAdmin, async (req, res) => {
       logo = null,
       status = "active",
       adminName,
+      adminEmail,
       adminPhone,
-      adminPassword,
     } = body;
 
     if (!name?.trim()) {
       fail(res, "اكتب اسم الشركة.");
       return;
     }
-    if (!adminName?.trim() || !adminPhone?.trim() || !adminPassword?.trim()) {
-      fail(res, "اكتب اسم المدير ورقم جواله وكلمة المرور.");
+    if (!adminName?.trim() || !adminEmail?.trim()) {
+      fail(res, "اكتب اسم المدير وبريده الإلكتروني.");
       return;
     }
 
-    const normalizedPhone = normalizePhone(adminPhone);
-    const existingAdmin = await db
-      .collection(COLLECTIONS.adminUsers)
-      .where("phone", "==", normalizedPhone)
-      .limit(1)
-      .get();
-
-    if (!existingAdmin.empty) {
-      fail(res, "رقم جوال المدير مسجّل مسبقاً.", 409);
-      return;
-    }
-
+    const email = normalizeEmail(adminEmail);
     const now = new Date().toISOString();
+    const managerName = adminName.trim();
+    const managerPhone = adminPhone?.trim() || null;
     const businessDoc = await db.collection(COLLECTIONS.businesses).add({
       name: name.trim(),
       logo,
       status,
       adminUserId: null,
+      adminName: managerName,
+      adminEmail: email,
+      adminPhone: managerPhone,
+      managerName,
+      managerEmail: email,
+      managerPhone,
       createdAt: now,
       updatedAt: now,
     });
 
-    const adminRef = await db.collection(COLLECTIONS.adminUsers).add({
-      name: adminName.trim(),
-      phone: normalizedPhone,
-      passwordHash: hashPassword(adminPassword),
-      role: "business_admin",
-      businessId: businessDoc.id,
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-    });
+    try {
+      await provisionCompanyManager(businessDoc.id, {
+        adminName: managerName,
+        adminEmail: email,
+        adminPhone: managerPhone,
+        inviterUid: inviterUid(req),
+      });
+    } catch (error) {
+      await businessDoc.delete();
+      throw error;
+    }
 
-    await businessDoc.update({
-      adminUserId: adminRef.id,
-      updatedAt: now,
-    });
+    try {
+      await sendCompanyManagerInvite(businessDoc.id, email);
+    } catch (error) {
+      const created = await businessDoc.get();
+      const admin = await loadAdminSummary(businessDoc.id, created.data()!);
+      ok(
+        res,
+        {
+          businessId: businessDoc.id,
+          name: name.trim(),
+          logo,
+          status,
+          ...admin,
+          createdAt: now,
+          updatedAt: now,
+          provisionError:
+            (error as Error).message ||
+            "أُنشئت الشركة وحُفظ البريد، لكن إيميل الدعوة لم يُرسل. اضغط «حفظ وإرسال الدعوة» مرة واحدة.",
+        },
+        201
+      );
+      return;
+    }
+
+    const created = await businessDoc.get();
+    const admin = await loadAdminSummary(businessDoc.id, created.data()!);
 
     ok(
       res,
@@ -205,9 +249,7 @@ router.post("/", requireSuperAdmin, async (req, res) => {
         name: name.trim(),
         logo,
         status,
-        adminUserId: adminRef.id,
-        adminName: adminName.trim(),
-        adminPhone: normalizedPhone,
+        ...admin,
         createdAt: now,
         updatedAt: now,
       },
@@ -236,42 +278,110 @@ router.put("/:businessId", requireSuperAdmin, async (req, res) => {
     if (body.name !== undefined) updates.name = body.name.trim();
     if (body.logo !== undefined) updates.logo = body.logo;
     if (body.status !== undefined) updates.status = body.status;
+    if (body.adminPhone !== undefined) {
+      updates.managerPhone = body.adminPhone?.trim() || null;
+    }
 
     await docRef.update(updates);
-
-    const data = doc.data()!;
-    const adminUserId = data.adminUserId as string | null;
-
-    if (
-      adminUserId &&
-      (body.adminName || body.adminPhone || body.adminPassword)
-    ) {
-      const adminUpdates: Record<string, unknown> = { updatedAt: now };
-      if (body.adminName) adminUpdates.name = body.adminName.trim();
-      if (body.adminPassword) {
-        adminUpdates.passwordHash = hashPassword(body.adminPassword);
-      }
-      if (body.adminPhone) {
-        const normalizedPhone = normalizePhone(body.adminPhone);
-        const duplicate = await db
-          .collection(COLLECTIONS.adminUsers)
-          .where("phone", "==", normalizedPhone)
-          .get();
-        const taken = duplicate.docs.some((d) => d.id !== adminUserId);
-        if (taken) {
-          fail(res, "رقم جوال المدير مسجّل مسبقاً.", 409);
-          return;
-        }
-        adminUpdates.phone = normalizedPhone;
-      }
-      await db.collection(COLLECTIONS.adminUsers).doc(adminUserId).update(adminUpdates);
-    }
 
     ok(res, { businessId, ...updates });
   } catch (error) {
     fail(res, (error as Error).message, 500);
   }
 });
+
+router.get(
+  "/:businessId/manager",
+  requirePermission("businesses:read"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const doc = await businessRef(db, businessId).get();
+      if (!doc.exists) {
+        fail(res, "لم نجد هذه الشركة.", 404);
+        return;
+      }
+      const manager = await loadCompanyManagerSummary(businessId, doc.data()!);
+      ok(res, manager);
+    } catch (error) {
+      fail(res, (error as Error).message, 500);
+    }
+  }
+);
+
+router.patch("/:businessId/manager", requireSuperAdmin, async (req, res) => {
+  try {
+    const businessId = paramId(req.params.businessId);
+    const { adminName, adminEmail, adminPhone, action } = req.body as {
+      adminName?: string;
+      adminEmail?: string;
+      adminPhone?: string | null;
+      action?: "replace" | "migrate_legacy" | "assign";
+    };
+    if (!adminName?.trim() || !adminEmail?.trim()) {
+      fail(res, "الاسم والبريد الإلكتروني مطلوبان.");
+      return;
+    }
+
+    const doc = await businessRef(db, businessId).get();
+    if (!doc.exists) {
+      fail(res, "لم نجد هذه الشركة.", 404);
+      return;
+    }
+
+    const uid = inviterUid(req);
+    if (action === "migrate_legacy") {
+      await migrateLegacyManagerEmail(businessId, adminEmail, uid);
+    } else if (action === "replace") {
+      await replaceCompanyManager(businessId, {
+        adminName: adminName.trim(),
+        adminEmail: adminEmail.trim(),
+        adminPhone: adminPhone ?? null,
+        inviterUid: uid,
+      });
+    } else {
+      await provisionCompanyManager(businessId, {
+        adminName: adminName.trim(),
+        adminEmail: adminEmail.trim(),
+        adminPhone: adminPhone ?? null,
+        inviterUid: uid,
+      });
+    }
+
+    await sendCompanyManagerInvite(businessId, adminEmail.trim());
+
+    const refreshed = await businessRef(db, businessId).get();
+    ok(res, await loadCompanyManagerSummary(businessId, refreshed.data()!));
+  } catch (error) {
+    const err = error as Error & { status?: number };
+    fail(res, err.message, err.status ?? 400);
+  }
+});
+
+router.post(
+  "/:businessId/manager/resend-invite",
+  requireSuperAdmin,
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const doc = await businessRef(db, businessId).get();
+      if (!doc.exists) {
+        fail(res, "لم نجد هذه الشركة.", 404);
+        return;
+      }
+      const manager = await loadCompanyManagerSummary(businessId, doc.data()!);
+      if (!manager.email) {
+        fail(res, "لا يوجد بريد إلكتروني للمدير.", 400);
+        return;
+      }
+      const sent = await sendCompanyManagerInvite(businessId, manager.email);
+      ok(res, sent);
+    } catch (error) {
+      const err = error as Error & { status?: number };
+      fail(res, err.message, err.status ?? 400);
+    }
+  }
+);
 
 router.patch("/:businessId/disable", requireSuperAdmin, async (req, res) => {
   try {
@@ -321,5 +431,94 @@ router.delete("/:businessId", requireSuperAdmin, async (req, res) => {
     fail(res, (error as Error).message, 500);
   }
 });
+
+router.get(
+  "/:businessId/employees",
+  requirePermission("users:read", "drivers:read"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      const employees = await listBusinessEmployees(businessId);
+      ok(res, employees);
+    } catch (error) {
+      fail(res, (error as Error).message, 500);
+    }
+  }
+);
+
+router.patch(
+  "/:businessId/employees/:uid",
+  requirePermission("users:manage"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const uid = paramId(req.params.uid);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      await updateEmployeeMembership(businessId, uid, req.body ?? {});
+      ok(res, { updated: true });
+    } catch (error) {
+      fail(res, (error as Error).message, 400);
+    }
+  }
+);
+
+router.delete(
+  "/:businessId/employees/:uid",
+  requirePermission("users:manage"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const uid = paramId(req.params.uid);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      await removeEmployeeFromBusiness(businessId, uid);
+      ok(res, { removed: true });
+    } catch (error) {
+      fail(res, (error as Error).message, 400);
+    }
+  }
+);
+
+router.post(
+  "/:businessId/employees/:uid/resend-invite",
+  requirePermission("users:manage"),
+  async (req, res) => {
+    try {
+      const businessId = paramId(req.params.businessId);
+      const uid = paramId(req.params.uid);
+      const auth = req.adminAuth!;
+      if (auth.role === "business_admin" && auth.businessId !== businessId) {
+        fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
+        return;
+      }
+      const userDoc = await db.collection(COLLECTIONS.users).doc(uid).get();
+      if (!userDoc.exists) {
+        fail(res, "المستخدم غير موجود.", 404);
+        return;
+      }
+      const email = userDoc.data()?.email as string | undefined;
+      if (!email) {
+        fail(res, "لا يوجد إيميل.", 400);
+        return;
+      }
+      await sendPasswordSetupLink(email);
+      ok(res, { sent: true });
+    } catch (error) {
+      fail(res, (error as Error).message, 400);
+    }
+  }
+);
 
 export default router;

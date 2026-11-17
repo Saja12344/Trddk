@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:tardadi_core/tardadi_core.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/route_list_item.dart';
 import '../services/bus_arrival_notifications.dart';
 import '../services/passenger_api.dart';
+import '../ui/trddk_typography.dart';
 import '../widgets/left_back_button.dart';
 import '../widgets/onboarding/frosted_glass.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
@@ -26,19 +27,129 @@ class RouteMapScreen extends StatefulWidget {
 }
 
 class _RouteMapScreenState extends State<RouteMapScreen> {
-  final _api = createPassengerApi();
   final _notifications = BusArrivalNotificationService.instance;
   RouteLiveSnapshot? _snapshot;
   List<BusArrivalItem> _buses = [];
   var _loading = true;
+  String? _loadError;
   Timer? _refreshTimer;
+  var _liveLoadInFlight = false;
+  GeoPoint? _passengerPosition;
+
+  TardadiApi get _api => createPassengerApi(
+        organizationId: widget.route.businessId,
+      );
 
   @override
   void initState() {
     super.initState();
     _notifications.addListener(_onNotificationsChanged);
+    unawaited(_loadPassengerPosition());
     _loadLive();
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadLive());
+  }
+
+  var _locationPromptShown = false;
+
+  Future<void> _loadPassengerPosition() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        await _showLocationAlert(serviceOff: true);
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        await _showLocationAlert(
+          serviceOff: false,
+          permanentlyDenied: permission == LocationPermission.deniedForever,
+        );
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(timeLimit: Duration(seconds: 8)),
+      );
+      if (!mounted) return;
+      setState(() {
+        _passengerPosition = GeoPoint(
+          latitude: position.latitude,
+          longitude: position.longitude,
+        );
+      });
+    } catch (_) {}
+  }
+
+  /// Tells the passenger why their location isn't on the map and offers a
+  /// shortcut to fix it, instead of leaving the map silently without them.
+  Future<void> _showLocationAlert({
+    required bool serviceOff,
+    bool permanentlyDenied = false,
+  }) async {
+    if (!mounted || _locationPromptShown) return;
+    _locationPromptShown = true;
+    final l10n = context.l10n;
+    // On Android a plain "denied" can still be asked again in-app; anything
+    // else needs the system settings.
+    final canAskAgain = !serviceOff && !permanentlyDenied;
+    final action = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: l10n.textDirection,
+        child: AlertDialog(
+          backgroundColor: OnboardingTheme.card,
+          title: Text(
+            l10n.locationOffTitle,
+            style: TrddkTypography.text(
+              color: OnboardingTheme.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            serviceOff ? l10n.locationServiceOffMessage : l10n.locationDeniedMessage,
+            style: TrddkTypography.text(color: OnboardingTheme.muted, fontSize: 15),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                l10n.notNow,
+                style: TrddkTypography.text(color: OnboardingTheme.muted, fontSize: 14),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                canAskAgain ? l10n.locationAllowButton : l10n.openSettings,
+                style: TrddkTypography.text(
+                  color: OnboardingTheme.orange,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action != true) return;
+    if (serviceOff) {
+      await Geolocator.openLocationSettings();
+    } else if (permanentlyDenied) {
+      await Geolocator.openAppSettings();
+    } else {
+      final retry = await Geolocator.requestPermission();
+      if (retry == LocationPermission.deniedForever) {
+        await Geolocator.openAppSettings();
+      } else if (retry == LocationPermission.whileInUse ||
+          retry == LocationPermission.always) {
+        _locationPromptShown = false;
+        unawaited(_loadPassengerPosition());
+      }
+    }
   }
 
   @override
@@ -53,14 +164,29 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   }
 
   Future<void> _loadLive() async {
+    if (_liveLoadInFlight) return;
+    _liveLoadInFlight = true;
+    final firstLoad = _snapshot == null;
+    if (mounted && firstLoad) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
     try {
-      final snapshot = await _api.getRouteLive(widget.route.routeId);
+      final snapshot = await _api.getRouteLive(
+        widget.route.routeId,
+        organizationId: widget.route.businessId,
+      );
       if (!mounted) return;
-      final buses = snapshot.buses
+      final visibleBuses = snapshot.buses
+          .where((bus) => bus.crowdLevel != 'on_break')
+          .toList();
+      final buses = visibleBuses
           .map(
             (bus) => BusArrivalItem.fromBus(
               bus,
-              minutesAway: _estimateMinutes(bus, snapshot.stops),
+              minutesAway: _estimateMinutes(bus, snapshot.stops, snapshot.route),
             ),
           )
           .toList();
@@ -70,23 +196,73 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         _snapshot = snapshot;
         _buses = buses;
         _loading = false;
+        _loadError = null;
       });
       _notifications.updateFromLive(buses: buses, stops: snapshot.stops);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      final fallback = _fallbackSnapshot();
+      setState(() {
+        _loading = false;
+        if (fallback != null) {
+          _snapshot = fallback;
+          _buses = fallback.buses
+              .map(
+                (bus) => BusArrivalItem.fromBus(
+                  bus,
+                  minutesAway: _estimateMinutes(
+                    bus,
+                    fallback.stops,
+                    fallback.route,
+                  ),
+                ),
+              )
+              .toList();
+          _loadError = null;
+        } else {
+          _loadError = error.toString().replaceFirst('Exception: ', '');
+        }
+      });
+    } finally {
+      _liveLoadInFlight = false;
     }
   }
 
-  int _estimateMinutes(BusModel bus, List<StopModel> stops) {
-    final location = bus.currentLocation;
-    if (location == null || stops.isEmpty) return 99;
-
-    final target = stops.first;
-    return estimateEtaMinutes(
-      location,
-      GeoPoint(latitude: target.latitude, longitude: target.longitude),
+  RouteLiveSnapshot? _fallbackSnapshot() {
+    final cachedRoute = widget.route.route;
+    if (cachedRoute == null) return null;
+    return RouteLiveSnapshot(
+      route: cachedRoute,
+      stops: const [],
+      buses: const [],
+      liveBusCount: widget.route.liveBusCount,
     );
+  }
+
+  GeoPoint? _etaTarget(List<StopModel> stops, RouteModel route) {
+    if (stops.isNotEmpty) {
+      final stop = stops.first;
+      return GeoPoint(latitude: stop.latitude, longitude: stop.longitude);
+    }
+    final from = route.fromLocation;
+    if (from != null) return from.toGeoPoint();
+    final points = decodeRoutePolyline(route.polyline);
+    if (points.isNotEmpty) {
+      return GeoPoint(
+        latitude: points.first.latitude,
+        longitude: points.first.longitude,
+      );
+    }
+    final to = route.toLocation;
+    return to?.toGeoPoint();
+  }
+
+  int _estimateMinutes(BusModel bus, List<StopModel> stops, RouteModel route) {
+    final location = bus.currentLocation;
+    final target = _etaTarget(stops, route);
+    if (location == null || target == null) return 0;
+
+    return estimateEtaMinutes(location, target);
   }
 
   Future<void> _toggleBell(BusArrivalItem bus) async {
@@ -104,10 +280,11 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _FullRouteMapScreen(
-          title: context.l10n.localizeRouteName(widget.route.name),
+          title: context.l10n.routeDisplayName(widget.route),
           route: snapshot.route,
           stops: snapshot.stops,
           buses: snapshot.buses,
+          passengerPosition: _passengerPosition,
         ),
       ),
     );
@@ -117,7 +294,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final snapshot = _snapshot;
-    final routeName = l10n.localizeRouteName(widget.route.name);
+    final routeName = l10n.routeDisplayName(widget.route);
     final liveCount = snapshot?.liveBusCount ?? widget.route.liveBusCount;
 
     return Scaffold(
@@ -151,24 +328,32 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
       body: Column(
         children: [
           Expanded(
-            flex: 5,
+            flex: 6,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: _loading || snapshot == null
+              child: _loading
                   ? const Center(child: TardadiLoading(size: 72))
-                  : _RouteMapPreview(
-                      onTap: _openFullMap,
-                      child: PassengerRouteMap(
-                        route: snapshot.route,
-                        stops: snapshot.stops,
-                        buses: snapshot.buses,
-                        borderRadius: 16,
-                      ),
-                    ),
+                  : _loadError != null
+                      ? _RouteLoadError(
+                          message: _loadError!,
+                          onRetry: _loadLive,
+                        )
+                      : snapshot == null
+                          ? const Center(child: TardadiLoading(size: 72))
+                          : _RouteMapPreview(
+                              onTap: _openFullMap,
+                              child: PassengerRouteMap(
+                                route: snapshot.route,
+                                stops: snapshot.stops,
+                                buses: snapshot.buses,
+                                passengerPosition: _passengerPosition,
+                                borderRadius: 16,
+                              ),
+                            ),
             ),
           ),
           Expanded(
-            flex: 4,
+            flex: 3,
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
@@ -180,15 +365,12 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
               ),
               child: Stack(
                 children: [
-                  const LogoWatermark(
-                    opacity: 0.07,
-                    alignment: Alignment(0, 0.15),
-                  ),
                   _buses.isEmpty
                       ? Center(
                           child: Text(
                             l10n.noLiveBuses,
-                            style: GoogleFonts.ubuntu(
+                            textAlign: TextAlign.center,
+                            style: TrddkTypography.text(
                               color: OnboardingTheme.muted,
                               fontSize: 15,
                             ),
@@ -223,12 +405,14 @@ class _FullRouteMapScreen extends StatelessWidget {
     required this.route,
     required this.stops,
     required this.buses,
+    this.passengerPosition,
   });
 
   final String title;
   final RouteModel route;
   final List<StopModel> stops;
   final List<BusModel> buses;
+  final GeoPoint? passengerPosition;
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +436,49 @@ class _FullRouteMapScreen extends StatelessWidget {
           route: route,
           stops: stops,
           buses: buses,
+          passengerPosition: passengerPosition,
           borderRadius: 16,
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteLoadError extends StatelessWidget {
+  const _RouteLoadError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 40,
+              color: OnboardingTheme.muted.withValues(alpha: 0.8),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TrddkTypography.text(
+                color: OnboardingTheme.muted,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: onRetry,
+              child: Text(isArabic ? 'إعادة المحاولة' : 'Retry'),
+            ),
+          ],
         ),
       ),
     );
@@ -276,28 +502,7 @@ class _RouteMapPreview extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              child,
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.fullscreen_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: child,
         ),
       ),
     );
@@ -359,7 +564,7 @@ class _BusArrivalCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         l10n.vehicleLabel(item.vehicleType, item.name),
-                        style: GoogleFonts.ubuntu(
+                        style: TrddkTypography.text(
                           color: titleColor,
                           fontWeight: FontWeight.w700,
                           fontSize: 18,
@@ -445,7 +650,7 @@ class _LiveBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             l10n.liveBadge,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: Colors.white,
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -491,7 +696,7 @@ class _ArrivalDetailChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: GoogleFonts.ubuntu(
+            style: TrddkTypography.text(
               color: textColor,
               fontSize: 13,
               fontWeight: FontWeight.w600,

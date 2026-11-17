@@ -143,6 +143,18 @@ export class TardadiApiClient {
     });
   }
 
+  setTripBreak(tripId: string, driverId: string, onBreak: boolean) {
+    return this.request("/api/trips/break", {
+      method: "POST",
+      body: JSON.stringify({
+        organizationId: this.organizationId,
+        tripId,
+        driverId,
+        onBreak,
+      }),
+    });
+  }
+
   sendGps(payload: {
     tripId: string;
     driverId: string;

@@ -1,8 +1,8 @@
 {
-  "name": "ترددي — لوحة الإدارة",
-  "short_name": "ترددي",
+  "name": "TRDDK — لوحة الإدارة",
+  "short_name": "TRDDK",
   "description": "إدارة الخطوط والباصات والسائقين",
-  "start_url": "/",
+  "start_url": "/login",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#EB4F26",

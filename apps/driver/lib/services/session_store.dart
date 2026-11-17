@@ -40,6 +40,7 @@ class SessionStore {
       route: route,
       stops: stops,
       tripId: _session!.tripId,
+      sessionToken: _session!.sessionToken,
     );
   }
 }

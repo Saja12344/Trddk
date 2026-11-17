@@ -1,0 +1,68 @@
+runConfig:
+  cpu: 1
+  memoryMiB: 1024
+  maxInstances: 4
+  minInstances: 0
+  concurrency: 80
+
+scripts:
+  buildCommand: npm ci --workspaces=false --include=dev && npm run build
+  runCommand: npm run start
+
+env:
+  - variable: NODE_ENV
+    value: production
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: TARDADI_API_URL
+    value: https://us-central1-trddk-54c45.cloudfunctions.net/api
+    availability:
+      - RUNTIME
+  - variable: ADMIN_PUBLIC_URL
+    value: https://www.tardadi.com
+    availability:
+      - RUNTIME
+  - variable: NEXT_PUBLIC_PASSWORD_RESET_CONTINUE_URL
+    value: https://www.tardadi.com/login
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: SUPPORT_EMAIL
+    value: support@tardadi.com
+    availability:
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyDF72v_3g4nkc7YUIIRkLLmlzPsDBYBHbI
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: trddk-54c45.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: trddk-54c45
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: trddk-54c45.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "815276520530"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:815276520530:web:b1ae2ce6fa514a34351b8b
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: FIREBASE_WEB_API_KEY
+    value: AIzaSyDF72v_3g4nkc7YUIIRkLLmlzPsDBYBHbI
+    availability:
+      - RUNTIME

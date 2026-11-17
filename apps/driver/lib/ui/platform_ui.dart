@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'driver_design.dart';
+
 bool _isApplePlatform(BuildContext context) {
   return Platform.isIOS ||
       Platform.isMacOS ||
@@ -182,56 +184,45 @@ List<Widget> _dialogActions(
   ];
 }
 
-/// Short feedback — Material SnackBar on Android, Cupertino banner on iOS.
+/// Short feedback — light banner readable on navy and white screens.
 void showPlatformMessage(BuildContext context, String message) {
-  if (_isApplePlatform(context)) {
-    _showCupertinoBanner(context, message);
-    return;
-  }
+  final trimmed = message.trim();
+  if (trimmed.isEmpty) return;
 
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-}
-
-void _showCupertinoBanner(BuildContext context, String message) {
   final overlay = Overlay.of(context);
   late OverlayEntry entry;
   entry = OverlayEntry(
     builder: (context) {
       final top = MediaQuery.paddingOf(context).top;
       return Positioned(
-        top: top + 8,
+        top: top + 10,
         left: 16,
         right: 16,
         child: Material(
           color: Colors.transparent,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: CupertinoColors.systemGrey6.darkColor,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: DriverColors.orange, width: 2),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 12,
+                  color: Color(0x40000000),
+                  blurRadius: 14,
                   offset: Offset(0, 4),
                 ),
               ],
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               child: Text(
-                message,
+                trimmed,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: CupertinoColors.label,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  color: DriverColors.navyPanel,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
                 ),
               ),
             ),
@@ -242,7 +233,7 @@ void _showCupertinoBanner(BuildContext context, String message) {
   );
 
   overlay.insert(entry);
-  Future<void>.delayed(const Duration(seconds: 2), () {
+  Future<void>.delayed(const Duration(seconds: 3), () {
     if (entry.mounted) entry.remove();
   });
 }

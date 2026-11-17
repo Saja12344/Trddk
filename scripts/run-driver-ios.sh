@@ -2,14 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=trddk-dart-defines.sh
+source "$ROOT/scripts/trddk-dart-defines.sh"
 IOS_DEVICE_NAME="${IOS_DEVICE_NAME:-iPhone 17 Pro}"
 IOS_DEVICE_ID="${IOS_DEVICE_ID:-}"
 
+# Use Xcode's developer dir when it is installed, even if xcode-select points at the Command Line Tools.
 if [[ -d "/Applications/Xcode.app/Contents/Developer" ]]; then
   export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 fi
-
-export PATH="$ROOT/scripts/ios-bin:$PATH"
 
 cd "$ROOT/apps/driver"
 flutter pub get
@@ -36,4 +37,4 @@ open -a Simulator --args -CurrentDeviceUDID "$IOS_DEVICE_ID"
 
 bash "$ROOT/scripts/set-sim-location.sh"
 
-flutter run -d "$IOS_DEVICE_ID"
+flutter run -d "$IOS_DEVICE_ID" "${TRDDK_DART_DEFINES[@]}"

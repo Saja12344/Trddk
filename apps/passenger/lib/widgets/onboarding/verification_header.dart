@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:tardadi_core/tardadi_core.dart';
+
+import 'tardadi_logo.dart';
 import 'onboarding_scale.dart';
 import 'onboarding_theme.dart';
 
@@ -54,10 +57,8 @@ class VerificationHeader extends StatelessWidget {
                 ),
                 Expanded(
                   child: Center(
-                    child: Image.asset(
-                      'assets/images/logo_full.png',
-                      height: scale.verifyHeaderLogoHeight,
-                      fit: BoxFit.contain,
+                    child: TrddkBrandLockup(
+                      height: scale.verifyHeaderLogoHeight * 0.72,
                     ),
                   ),
                 ),

@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/firebase_auth_service.dart';
+import '../services/passenger_api.dart';
+import '../services/passenger_phone_login.dart';
+import '../services/store_review.dart';
 import '../services/user_session.dart';
 import '../widgets/onboarding/numeric_keypad.dart';
 import '../widgets/onboarding/onboarding_scale.dart';
@@ -12,30 +16,46 @@ import '../widgets/onboarding/verification_header.dart';
 import 'routes_main_screen.dart';
 
 class VerifyPhoneScreen extends StatefulWidget {
-  const VerifyPhoneScreen({super.key, this.fromSettings = false});
+  const VerifyPhoneScreen({
+    super.key,
+    this.phone,
+    this.verificationId,
+    this.serverOtp = false,
+  });
 
-  final bool fromSettings;
+  final String? phone;
+  final String? verificationId;
+  final bool serverOtp;
 
   @override
   State<VerifyPhoneScreen> createState() => _VerifyPhoneScreenState();
 }
 
 class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
-  final _otpControllers = List.generate(6, (_) => TextEditingController());
-  final _focusNodes = List.generate(6, (_) => FocusNode());
-  var _secondsLeft = 30;
-  Timer? _timer;
+  static const _maxDigits = 8;
+
+  final _otpControllers = List.generate(
+    _maxDigits,
+    (_) => TextEditingController(),
+  );
+  final _focusNodes = List.generate(_maxDigits, (_) => FocusNode());
+  final _api = createPassengerApi();
+  var _verifying = false;
+  String? _error;
+  String? _verificationId;
+
+  bool get _isReview =>
+      isPassengerStoreReviewPhone(UserSession.instance.phoneNumber ?? widget.phone ?? '');
+
+  int get _digitCount => _isReview ? 8 : 6;
 
   @override
   void initState() {
     super.initState();
+    _verificationId = widget.verificationId;
     for (final node in _focusNodes) {
       node.canRequestFocus = false;
     }
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_secondsLeft == 0) return;
-      setState(() => _secondsLeft--);
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       FocusManager.instance.primaryFocus?.unfocus();
@@ -44,7 +64,6 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
     for (final controller in _otpControllers) {
       controller.dispose();
     }
@@ -54,57 +73,203 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
     super.dispose();
   }
 
-  String get _otp => _otpControllers.map((c) => c.text).join();
-
-  String get _timerLabel {
-    final minutes = (_secondsLeft ~/ 60).toString().padLeft(2, '0');
-    final seconds = (_secondsLeft % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
+  String get _otp =>
+      _otpControllers.take(_digitCount).map((c) => c.text).join();
 
   void _goBack() {
     Navigator.of(context).pop();
   }
 
   void _onKeyTap(String value) {
+    if (_verifying) return;
     if (value == 'back') {
-      for (var i = 5; i >= 0; i--) {
+      for (var i = _digitCount - 1; i >= 0; i--) {
         if (_otpControllers[i].text.isNotEmpty) {
           _otpControllers[i].clear();
-          setState(() {});
+          setState(() => _error = null);
           return;
         }
       }
       return;
     }
 
-    for (var i = 0; i < 6; i++) {
+    for (var i = 0; i < _digitCount; i++) {
       if (_otpControllers[i].text.isEmpty) {
         _otpControllers[i].text = value;
-        setState(() {});
+        setState(() => _error = null);
         return;
       }
     }
   }
 
-  void _verify() {
-    if (_otp.length < 6) return;
-
-    if (UserSession.instance.phoneNumber == null) {
-      UserSession.instance.setPhoneNumber('+966500000000');
+  Future<void> _verify() async {
+    if (_verifying || _otp.length != _digitCount) return;
+    final phone = UserSession.instance.phoneNumber ?? widget.phone;
+    if (_isReview) {
+      if (phone == null || !isPassengerStoreReviewPhone(phone)) {
+        setState(() => _error = context.l10n.phoneLoginUnavailable);
+        return;
+      }
+      setState(() {
+        _verifying = true;
+        _error = null;
+      });
+      final rejected = context.l10n.reviewCodeRejected;
+      try {
+        final result = await _api.passengerReviewLogin(phone: phone, code: _otp);
+        if (result.scope != 'public' || result.sessionToken.isEmpty) {
+          throw Exception(rejected);
+        }
+        await UserSession.instance.setStoreReviewSession(
+          phone: phone,
+          sessionToken: result.sessionToken,
+        );
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute<void>(builder: (_) => const RoutesMainScreen()),
+          (_) => false,
+        );
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _error = context.l10n.reviewCodeRejected;
+          for (final controller in _otpControllers) {
+            controller.clear();
+          }
+        });
+      } finally {
+        if (mounted) setState(() => _verifying = false);
+      }
+      return;
     }
 
-    UserSession.instance.setAccountType(AccountType.business);
+    if (widget.serverOtp) {
+      if (phone == null) {
+        setState(() => _error = context.l10n.otpSendFailed);
+        return;
+      }
+      setState(() {
+        _verifying = true;
+        _error = null;
+      });
+      try {
+        final result = await _api.passengerVerifyPhoneOtp(phone: phone, code: _otp);
+        if (!mounted) return;
+        await continuePassengerPhoneSession(context, phone: phone, result: result);
+      } catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _error = passengerSmsError(error, context.l10n);
+          for (final controller in _otpControllers) {
+            controller.clear();
+          }
+        });
+      } finally {
+        if (mounted) setState(() => _verifying = false);
+      }
+      return;
+    }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const RoutesMainScreen()),
-    );
+    final verificationId = _verificationId;
+    if (phone == null || verificationId == null || verificationId.isEmpty) {
+      setState(() => _error = context.l10n.otpSendFailed);
+      return;
+    }
+
+    setState(() {
+      _verifying = true;
+      _error = null;
+    });
+    try {
+      await PassengerFirebaseAuth.instance.signInWithSmsCode(
+        verificationId: verificationId,
+        smsCode: _otp,
+      );
+      if (!mounted) return;
+      await openPassengerBusinessSession(context, phone: phone);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = passengerSmsError(error, context.l10n);
+        for (final controller in _otpControllers) {
+          controller.clear();
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
+  }
+
+  Future<void> _resend() async {
+    final phone = widget.phone ?? UserSession.instance.phoneNumber;
+    if (_verifying || _isReview || phone == null) return;
+    if (widget.serverOtp) {
+      setState(() {
+        _verifying = true;
+        _error = null;
+      });
+      try {
+        await _api.passengerStartPhoneLogin(phone: phone);
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _error = passengerSmsError(error, context.l10n));
+      } finally {
+        if (mounted) setState(() => _verifying = false);
+      }
+      return;
+    }
+    setState(() {
+      _verifying = true;
+      _error = null;
+    });
+    final sendFailed = context.l10n.otpSendFailed;
+    final done = Completer<String>();
+    try {
+      await PassengerFirebaseAuth.instance.verifyPhoneNumber(
+        phone: phone,
+        verificationCompleted: (credential) async {
+          try {
+            await PassengerFirebaseAuth.instance.signInWithCredential(credential);
+            if (!done.isCompleted) done.complete('AUTO');
+          } catch (error) {
+            if (!done.isCompleted) done.completeError(error);
+          }
+        },
+        verificationFailed: (error) {
+          if (!done.isCompleted) done.completeError(error);
+        },
+        codeSent: (verificationId, _) {
+          if (!done.isCompleted) done.complete(verificationId);
+        },
+        codeAutoRetrievalTimeout: (_) {},
+      );
+      final verificationId = await done.future.timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw Exception(sendFailed),
+      );
+      if (!mounted) return;
+      if (verificationId == 'AUTO') {
+        await openPassengerBusinessSession(context, phone: phone);
+        return;
+      }
+      setState(() => _verificationId = verificationId);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = passengerSmsError(error, context.l10n));
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final scale = OnboardingScale(context);
     final l10n = context.l10n;
+    final contentWidth =
+        MediaQuery.sizeOf(context).width - scale.horizontalPadding * 2;
+    final boxWidth = ((contentWidth - (_digitCount - 1) * scale.s(6)) /
+            _digitCount)
+        .clamp(28.0, scale.otpBoxSize);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -129,7 +294,7 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
                   ),
                   SizedBox(height: scale.s(8)),
                   Text(
-                    l10n.verifyPhoneSubtitle,
+                    l10n.reviewCodeSubtitle,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: OnboardingTheme.routeMeta,
@@ -143,11 +308,11 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: List.generate(
-                        6,
+                        _digitCount,
                         (index) => _OtpBox(
-                          size: scale.otpBoxSize,
+                          size: boxWidth,
                           height: scale.otpBoxHeight,
-                          fontSize: scale.s(22),
+                          fontSize: scale.s(18),
                           controller: _otpControllers[index],
                           focusNode: _focusNodes[index],
                           onChanged: (_) => setState(() {}),
@@ -155,29 +320,24 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(height: scale.s(14)),
-                  Text.rich(
-                    textAlign: TextAlign.center,
-                    TextSpan(
-                      text: l10n.didntReceiveCode,
+                  if (_error != null) ...[
+                    SizedBox(height: scale.s(12)),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: OnboardingTheme.routeMeta,
-                        fontSize: scale.s(14),
+                        color: const Color(0xFFE53935),
+                        fontSize: scale.s(13),
                       ),
-                      children: [
-                        TextSpan(
-                          text: _secondsLeft > 0
-                              ? l10n.resendIn(_timerLabel)
-                              : l10n.resendCode,
-                          style: TextStyle(
-                            color: OnboardingTheme.orange,
-                            fontWeight: FontWeight.w600,
-                            fontSize: scale.s(14),
-                          ),
-                        ),
-                      ],
                     ),
-                  ),
+                  ],
+                  if (!_isReview) ...[
+                    SizedBox(height: scale.s(8)),
+                    TextButton(
+                      onPressed: _verifying ? null : _resend,
+                      child: Text(l10n.sendVerificationCode),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -192,7 +352,9 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _otp.length == 6 ? _verify : null,
+                onPressed: _otp.length == _digitCount && !_verifying
+                    ? _verify
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: OnboardingTheme.orange,
                   foregroundColor: OnboardingTheme.white,

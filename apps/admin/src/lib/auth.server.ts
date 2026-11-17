@@ -6,17 +6,17 @@ import {
   type SessionPayload,
 } from "./auth.constants";
 import { getServerApiUrl } from "./env.server";
+import { sessionFromAdminCookie } from "./adminSessionToken";
+import { scopedRequestBusinessId } from "./adminTenantScope";
+
+export function getAdminJwtSecret(): string | undefined {
+  return process.env.ADMIN_JWT_SECRET;
+}
 
 export async function getSession(): Promise<SessionPayload | null> {
   const jar = await cookies();
   const raw = jar.get(SESSION_COOKIE)?.value;
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as SessionPayload;
-  } catch {
-    return null;
-  }
+  return sessionFromAdminCookie(raw, getAdminJwtSecret());
 }
 
 export async function getBusinessContextId(): Promise<string | null> {
@@ -28,10 +28,12 @@ export async function resolveActiveBusinessId(
   session: SessionPayload | null
 ): Promise<string | null> {
   if (!session) return null;
-  if (session.user.role === "business_admin") {
-    return session.user.businessId;
-  }
-  return getBusinessContextId();
+  const scope = scopedRequestBusinessId({
+    role: session.user.role,
+    tokenBusinessId: session.user.businessId,
+    contextBusinessId: await getBusinessContextId(),
+  });
+  return scope.ok ? scope.businessId : null;
 }
 
 export async function verifySessionWithBackend(

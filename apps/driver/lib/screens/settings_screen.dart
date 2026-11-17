@@ -118,6 +118,7 @@ class _VehicleOnboardingScreenState extends State<VehicleOnboardingScreen> {
                 children: [
                   for (final vehicle in kVehicleOptions)
                     _VehicleGridCard(
+                      vehicle: vehicle,
                       label: context.l10n.vehicleLabel(vehicle),
                       selected: _selected == vehicle,
                       onTap: () => setState(() => _selected = vehicle),
@@ -142,11 +143,14 @@ class _VehicleOnboardingScreenState extends State<VehicleOnboardingScreen> {
 
 class _VehicleGridCard extends StatelessWidget {
   const _VehicleGridCard({
+    required this.vehicle,
     required this.label,
     required this.selected,
     required this.onTap,
   });
 
+  /// Vehicle key ('Bus', 'Van'...) used to find the image.
+  final String vehicle;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -165,7 +169,9 @@ class _VehicleGridCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Center(
-                  child: _VehicleAssetIcon(vehicle: label),
+                  // Use the key, not the translated label, or the Arabic UI
+                  // finds no image.
+                  child: _VehicleAssetIcon(vehicle: vehicle),
                 ),
               ),
               const SizedBox(height: 10),

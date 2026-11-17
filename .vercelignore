@@ -1,0 +1,15 @@
+apps/driver
+apps/passenger
+packages/tardadi_core
+/firebase
+scripts
+*.dart
+**/.dart_tool
+**/ios
+**/android
+**/*.png
+**/*.jpg
+**/*.webp
+!apps/admin/public/
+!apps/admin/public/**
+.git

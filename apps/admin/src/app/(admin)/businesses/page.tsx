@@ -8,18 +8,23 @@ import { adminFetch } from "@/lib/adminFetch";
 import { getUserErrorMessage } from "@/lib/errorMessage";
 import { useAuth } from "@/components/AuthProvider";
 
+const emptyForm = {
+  name: "",
+  adminName: "",
+  adminEmail: "",
+  adminPhone: "",
+};
+
 export default function BusinessesPage() {
   const router = useRouter();
   const { user } = useAuth();
   const [businesses, setBusinesses] = useState<BusinessListItem[]>([]);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    adminName: "",
-    adminPhone: "",
-    adminPassword: "",
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [editName, setEditName] = useState("");
 
   async function load() {
     setError("");
@@ -35,13 +40,48 @@ export default function BusinessesPage() {
   async function createBusiness(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setMessage("");
     try {
-      await adminFetch("/api/businesses", {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
-      setForm({ name: "", adminName: "", adminPhone: "", adminPassword: "" });
+      const created = await adminFetch<{ provisionError?: string | null }>(
+        "/api/businesses",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: form.name.trim(),
+            adminName: form.adminName.trim(),
+            adminEmail: form.adminEmail.trim(),
+            adminPhone: form.adminPhone.trim() || null,
+          }),
+        }
+      );
+      setForm(emptyForm);
       setShowForm(false);
+      if (created?.provisionError) {
+        setError(created.provisionError);
+      } else {
+        setMessage(
+          "تم إنشاء الشركة وحفظ البريد وإرسال دعوة واحدة. مدير الشركة يدخل بالبريد، والسائق يدخل تطبيق السائق برقم الجوال."
+        );
+      }
+      await load();
+    } catch (err) {
+      setError(getUserErrorMessage(err));
+    }
+  }
+
+  async function saveBusinessName(businessId: string) {
+    if (!editName.trim()) {
+      setError("اكتب اسم الشركة.");
+      return;
+    }
+    setError("");
+    try {
+      await adminFetch(`/api/businesses/${businessId}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: editName.trim() }),
+      });
+      setEditingId(null);
+      setMessage("تم تحديث بيانات الشركة.");
       await load();
     } catch (err) {
       setError(getUserErrorMessage(err));
@@ -83,24 +123,28 @@ export default function BusinessesPage() {
       <div className="page-header row-between">
         <div>
           <h1>الشركات</h1>
-          <p>إدارة شركات النقل ومديريها</p>
+          <p>إدارة شركات النقل ومديريها عبر البريد الإلكتروني</p>
         </div>
         <button
           type="button"
           className={`btn btn-inline ${showForm ? "btn-secondary" : "btn-primary"}`}
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => {
+            setShowForm((v) => !v);
+            setForm(emptyForm);
+          }}
         >
           {showForm ? "إلغاء" : "+ شركة جديدة"}
         </button>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {message && <div className="alert alert-success">{message}</div>}
 
       {showForm && (
         <form className="card form-card mb-20" onSubmit={createBusiness}>
           <div className="form-card-header">
             <h3>إضافة شركة جديدة</h3>
-            <p>أنشئ مساحة عمل للشركة وحدّد مديرها</p>
+            <p>يُرسل للمدير رابط إعداد كلمة المرور على بريده، ثم يسجّل الدخول من صفحة الشركات</p>
           </div>
 
           <div className="form-section">
@@ -120,7 +164,7 @@ export default function BusinessesPage() {
           <div className="form-section">
             <h4 className="form-section-title">مدير الشركة</h4>
             <p className="form-section-hint">
-              رقم الجوال يصبح اسم المستخدم لتسجيل الدخول
+              البريد الإلكتروني هو حساب الدخول. لا يُستخدم رقم الجوال لتسجيل الدخول.
             </p>
             <div className="form-grid">
               <div className="field">
@@ -136,7 +180,21 @@ export default function BusinessesPage() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="admin-phone">رقم الجوال</label>
+                <label htmlFor="admin-email">البريد الإلكتروني</label>
+                <input
+                  id="admin-email"
+                  type="email"
+                  dir="ltr"
+                  placeholder="name@company.com"
+                  value={form.adminEmail}
+                  onChange={(e) =>
+                    setForm({ ...form, adminEmail: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="admin-phone">الجوال (اختياري للتواصل)</label>
                 <input
                   id="admin-phone"
                   type="tel"
@@ -146,20 +204,6 @@ export default function BusinessesPage() {
                   onChange={(e) =>
                     setForm({ ...form, adminPhone: e.target.value })
                   }
-                  required
-                />
-              </div>
-              <div className="field form-grid-full">
-                <label htmlFor="admin-pass">كلمة المرور</label>
-                <input
-                  id="admin-pass"
-                  type="password"
-                  placeholder="كلمة مرور قوية"
-                  value={form.adminPassword}
-                  onChange={(e) =>
-                    setForm({ ...form, adminPassword: e.target.value })
-                  }
-                  required
                 />
               </div>
             </div>
@@ -167,7 +211,7 @@ export default function BusinessesPage() {
 
           <div className="form-actions">
             <button type="submit" className="btn btn-primary btn-inline">
-              إنشاء الشركة
+              إنشاء الشركة وإرسال الدعوة
             </button>
             <button
               type="button"
@@ -187,11 +231,10 @@ export default function BusinessesPage() {
               <th>الشعار</th>
               <th>الشركة</th>
               <th>المدير</th>
-              <th>الجوال</th>
+              <th>البريد</th>
               <th>سائقين</th>
               <th>باصات</th>
               <th>خطوط</th>
-              <th>محطات</th>
               <th>الحالة</th>
               <th>إجراءات</th>
             </tr>
@@ -206,15 +249,40 @@ export default function BusinessesPage() {
                     <span className="logo-placeholder">—</span>
                   )}
                 </td>
-                <td className="cell-strong">{b.name}</td>
+                <td className="cell-strong">
+                  {editingId === b.businessId ? (
+                    <div className="inline-edit">
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        aria-label="اسم الشركة"
+                      />
+                      <button
+                        type="button"
+                        className="action-btn action-btn-view"
+                        onClick={() => void saveBusinessName(b.businessId)}
+                      >
+                        حفظ
+                      </button>
+                      <button
+                        type="button"
+                        className="action-btn"
+                        onClick={() => setEditingId(null)}
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  ) : (
+                    b.name
+                  )}
+                </td>
                 <td>{b.adminName || "—"}</td>
                 <td dir="ltr" className="cell-mono">
-                  {b.adminPhone || "—"}
+                  {b.adminEmail || "—"}
                 </td>
                 <td>{b.driverCount}</td>
                 <td>{b.busCount}</td>
                 <td>{b.routeCount}</td>
-                <td>{b.stationCount}</td>
                 <td>
                   <span
                     className={`badge ${b.status === "active" ? "badge-success" : "badge-muted"}`}
@@ -231,6 +299,17 @@ export default function BusinessesPage() {
                     >
                       عرض
                     </Link>
+                    <button
+                      type="button"
+                      className="action-btn action-btn-view"
+                      title="تعديل بيانات الشركة"
+                      onClick={() => {
+                        setEditingId(b.businessId);
+                        setEditName(b.name);
+                      }}
+                    >
+                      تعديل
+                    </button>
                     {b.status === "active" && (
                       <button
                         type="button"
@@ -255,7 +334,7 @@ export default function BusinessesPage() {
             ))}
             {businesses.length === 0 && (
               <tr>
-                <td colSpan={10} className="empty-cell">
+                <td colSpan={9} className="empty-cell">
                   لا توجد شركات بعد — اضغط «شركة جديدة» للبدء
                 </td>
               </tr>

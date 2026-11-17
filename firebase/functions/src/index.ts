@@ -1,4 +1,5 @@
-import * as functions from "firebase-functions";
+import { onRequest } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import express from "express";
 import cors from "cors";
 
@@ -10,11 +11,28 @@ import driversRouter from "./routes/drivers";
 import tripsRouter from "./routes/trips";
 import gpsRouter from "./routes/gps";
 import remindersRouter from "./routes/reminders";
+import usersRouter from "./routes/users";
+import { navigationRouter } from "./routes/routing";
 import { attachAdminAuth } from "./auth/middleware";
+import { isAllowedApiOrigin } from "./http/corsPolicy";
+
+const adminJwtSecret = defineSecret("ADMIN_JWT_SECRET");
+const smtpHost = defineSecret("SMTP_HOST");
+const smtpPort = defineSecret("SMTP_PORT");
+const smtpUser = defineSecret("SMTP_USER");
+const smtpPassword = defineSecret("SMTP_PASSWORD");
+const smtpFrom = defineSecret("SMTP_FROM");
+const googleRoutesApiKey = defineSecret("GOOGLE_ROUTES_API_KEY");
 
 const app = express();
 
-app.use(cors({ origin: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      callback(null, isAllowedApiOrigin(origin));
+    },
+  })
+);
 app.use(express.json());
 app.use(attachAdminAuth);
 
@@ -30,5 +48,28 @@ app.use("/api/drivers", driversRouter);
 app.use("/api/trips", tripsRouter);
 app.use("/api/gps", gpsRouter);
 app.use("/api/reminders", remindersRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/routing", navigationRouter);
 
-export const api = functions.https.onRequest(app);
+export const api = onRequest(
+  {
+    region: "us-central1",
+    memory: "256MiB",
+    cpu: 1,
+    timeoutSeconds: 60,
+    maxInstances: 3,
+    concurrency: 80,
+    cors: false,
+    invoker: "public",
+    secrets: [
+      adminJwtSecret,
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      smtpPassword,
+      smtpFrom,
+      googleRoutesApiKey,
+    ],
+  },
+  app
+);

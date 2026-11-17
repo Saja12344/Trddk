@@ -19,10 +19,11 @@ class AppLocalizations {
     return AppLocaleScope.of(context);
   }
 
-  String get appName => isArabic ? 'ترددي' : 'Tardadi';
+  String get appName => 'TRDDK';
 
   String get next => isArabic ? 'التالي' : 'Next';
   String get save => isArabic ? 'حفظ' : 'Save';
+  String get logout => isArabic ? 'تسجيل الخروج' : 'Log out';
   String get verify => isArabic ? 'تحقق' : 'Verify';
   String get onboardingStepPlan => isArabic ? '٠١ · خطّط' : '01 · PLAN';
 
@@ -67,8 +68,8 @@ class AppLocalizations {
       isArabic ? 'متابعة' : 'Continue';
 
   String get locationPermissionTitle => isArabic
-      ? 'السماح لـ "ترددي" باستخدام\nموقعك؟'
-      : "Allow 'Tardadi' to use\nyour location?";
+      ? 'السماح لـ TRDDK باستخدام\nموقعك؟'
+      : "Allow TRDDK to use\nyour location?";
 
   String get locationPermissionBody => isArabic
       ? 'سيُستخدم موقعك لعرض الأماكن القريبة وتحديثات المرور وتحديد موقعك.'
@@ -99,8 +100,12 @@ class AppLocalizations {
       : 'For registered organizations and companies only';
 
   String get businessNote => isArabic
-      ? 'الوصول للأعمال متاح للمنظمات المسجلة فقط'
-      : 'Business access is available for registered organizations only';
+      ? 'تسجيل الدخول برقم الجوال. الإيميل خطوة تحقق لاحقة عند الحاجة.'
+      : 'Sign in with your phone number. Email is only a later verification step.';
+
+  String get personalNote => isArabic
+      ? 'الحساب الشخصي (عام) لا يحتاج تسجيل دخول — انتقل مباشرة للخطوط العامة'
+      : 'Personal (public) mode needs no login — go straight to public routes';
 
   String get verifyYourNumber =>
       isArabic ? 'تحقق من رقمك' : 'Verify Your Number';
@@ -121,6 +126,57 @@ class AppLocalizations {
       isArabic ? 'أدخل رقم جوالك' : 'Enter your phone number';
   String get invalidPhone =>
       isArabic ? 'أدخل رقم جوال صحيح' : 'Enter a valid phone number';
+
+  String get phoneLogin =>
+      isArabic ? 'الدخول برقم الجوال' : 'Continue with phone number';
+
+  String get phoneNotRegistered => isArabic
+      ? 'رقم الجوال غير مسجل في أي شركة. تواصل مع الإدارة.'
+      : 'This number is not registered with any company.';
+
+  String get tooManyAttempts => isArabic
+      ? 'محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.'
+      : 'Too many attempts. Wait a moment and try again.';
+
+  String get otpSendFailed => isArabic
+      ? 'تعذر إرسال رمز التحقق. حاول مرة أخرى.'
+      : 'Could not send the verification code. Try again.';
+
+  String get phoneLoginUnavailable => isArabic
+      ? 'هذا الرقم غير مفعّل لتسجيل الدخول.'
+      : 'This phone number is not enabled for sign-in.';
+
+  String get reviewCodeSubtitle =>
+      isArabic ? 'أدخل رمز التحقق' : 'Enter the verification code';
+
+  String get reviewCodeRejected => isArabic
+      ? 'رمز التحقق غير صحيح.'
+      : 'The verification code is incorrect.';
+
+  String get enterYourEmail =>
+      isArabic ? 'أدخل بريدك الإلكتروني' : 'Enter your email';
+
+  String get emailOtpSubtitle => isArabic
+      ? 'سنرسل رمز تحقق إلى بريدك'
+      : 'We will send a verification code to your email';
+
+  String get sendVerificationCode =>
+      isArabic ? 'إرسال رمز التحقق' : 'Send verification code';
+
+  String get emailHint =>
+      isArabic ? 'name@company.com' : 'name@company.com';
+
+  String get enterValidEmail => isArabic
+      ? 'أدخل بريداً إلكترونياً صحيحاً'
+      : 'Enter a valid email address';
+
+  String get verifyEmailTitle =>
+      isArabic ? 'تحقق من بريدك' : 'Verify your email';
+
+  String get verifyEmailSubtitle => isArabic
+      ? 'أدخل الرمز المكوّن من 6 أرقام المرسل إلى بريدك'
+      : 'Enter the 6-digit code sent to your email';
+
   String get contactSupport =>
       isArabic ? 'تحتاج مساعدة؟ تواصل مع الدعم' : 'Need help? Contact support';
 
@@ -130,10 +186,30 @@ class AppLocalizations {
   String resendIn(String timer) =>
       isArabic ? 'إعادة الإرسال خلال $timer' : 'Resend in $timer';
 
+  String codeExpiresIn(String timer) => isArabic
+      ? 'ينتهي الرمز خلال $timer'
+      : 'Code expires in $timer';
+
   String get resendCode => isArabic ? 'إعادة إرسال الرمز' : 'Resend Code';
 
+  String get emailNotRegisteredWithCompany => isArabic
+      ? 'هذا البريد غير مسجّل لدى شركتك. تأكد أنك اخترت «أعمال» وليس «شخصي»، أو تواصل مع الإدارة.'
+      : 'This email is not registered with your company. Choose Business (not Personal), or contact your employer.';
+
+  String get chooseBusinessModeError => isArabic
+      ? 'تأكد أنك اخترت «أعمال» عند الدخول. إذا استمرت المشكلة تواصل مع الإدارة.'
+      : 'Choose Business mode on login. If this persists, contact your employer.';
+
+  String get invalidOrExpiredOtp => isArabic
+      ? 'رمز غير صحيح أو منتهي. اطلب «إعادة إرسال» واستخدم آخر رمز وصلك.'
+      : 'Invalid or expired code. Tap Resend and use the latest code.';
+
+  String get tooManyOtpAttempts => isArabic
+      ? 'محاولات كثيرة. اطلب رمزاً جديداً.'
+      : 'Too many attempts. Request a new code.';
+
   String get stationSearchHint =>
-      isArabic ? 'اسم المحطة' : 'Station name';
+      isArabic ? 'رقم الباص' : 'Bus number';
 
   String get noRoutesFound =>
       isArabic ? 'لا توجد مسارات' : 'No routes found';
@@ -142,17 +218,19 @@ class AppLocalizations {
 
   String get liveBadge => isArabic ? 'مباشر' : 'Live';
 
-  String get noLiveBuses => isArabic
-      ? 'لا يوجد باص محدّث على هذا الخط حالياً'
-      : 'No live buses on this route right now';
+  String get noLiveBuses =>
+      isArabic ? 'لا يوجد باص حالياً' : 'No bus available';
 
   String liveBusesOnRoute(int count) => isArabic
       ? '$count باص محدّث'
       : '$count live bus${count == 1 ? '' : 'es'}';
 
-  String minutesLabel(int minutes) => isArabic
-      ? '${minutes.toString().padLeft(2, '0')} د'
-      : '${minutes.toString().padLeft(2, '0')} min';
+  String minutesLabel(int minutes) {
+    if (minutes <= 0) return isArabic ? '—' : '—';
+    return isArabic
+        ? '$minutes د'
+        : '$minutes min';
+  }
 
   String routeStopTitle(String routeName, String stopLabel) {
     final name = localizeRouteName(routeName);
@@ -169,6 +247,16 @@ class AppLocalizations {
       'tkaful alrajhin' => 'تكافل الراجحي',
       _ => name,
     };
+  }
+
+  /// Route name in the current language. Uses the API's automatic
+  /// translation (nameAr / nameEn) and falls back to the original name.
+  String routeDisplayName(RouteListItem route) {
+    String? clean(String? v) => (v == null || v.trim().isEmpty) ? null : v.trim();
+    if (isArabic) {
+      return clean(route.nameAr) ?? localizeRouteName(route.name);
+    }
+    return clean(route.nameEn) ?? route.name;
   }
 
   bool routeNameMatchesQuery(String routeName, String query) {
@@ -192,9 +280,9 @@ class AppLocalizations {
 
   String crowdingLabel(String value) {
     return switch (value.toLowerCase()) {
-      'low' => isArabic ? 'منخفض' : 'Low',
-      'medium' => isArabic ? 'متوسط' : 'Medium',
-      'high' => isArabic ? 'مرتفع' : 'High',
+      'low' => isArabic ? 'ازدحام منخفض' : 'Low crowding',
+      'medium' => isArabic ? 'ازدحام متوسط' : 'Moderate crowding',
+      'high' => isArabic ? 'ازدحام عالي' : 'High crowding',
       _ => value,
     };
   }
@@ -246,6 +334,23 @@ class AppLocalizations {
   String get notificationsPermissionDenied => isArabic
       ? 'فعّل الإشعارات من إعدادات الجهاز لتلقي تنبيهات الباص'
       : 'Enable notifications in device settings to get bus alerts';
+
+  String get locationOffTitle =>
+      isArabic ? 'الموقع غير مفعّل' : 'Location is off';
+
+  String get locationDeniedMessage => isArabic
+      ? 'فعّل صلاحية الموقع لتطبيق ترددك عشان نعرض موقعك والباصات القريبة منك على الخريطة.'
+      : 'Allow location access for TRDDK so we can show you and nearby buses on the map.';
+
+  String get locationServiceOffMessage => isArabic
+      ? 'خدمة الموقع في جهازك مقفلة. شغّلها عشان نعرض موقعك على الخريطة.'
+      : 'Location services are turned off on your device. Turn them on to see your position on the map.';
+
+  String get openSettings => isArabic ? 'فتح الإعدادات' : 'Open settings';
+
+  String get locationAllowButton => isArabic ? 'السماح' : 'Allow';
+
+  String get notNow => isArabic ? 'ليس الآن' : 'Not now';
 }
 
 class AppLocaleScope extends InheritedWidget {

@@ -2,25 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import BusinessSwitcher from "./BusinessSwitcher";
 import { isSuperAdmin } from "@/lib/auth.constants";
+import TrddkWordmark from "./TrddkWordmark";
 
 type NavIcon =
   | "home"
   | "businesses"
+  | "beneficiaries"
   | "routes"
   | "buses"
   | "drivers"
   | "trips";
 
 const allNavItems = [
-  { href: "/", label: "الرئيسية", icon: "home" as const, superOnly: false },
+  { href: "/dashboard", label: "الرئيسية", icon: "home" as const, superOnly: false },
   {
     href: "/businesses",
     label: "الشركات",
     icon: "businesses" as const,
     superOnly: true,
+  },
+  {
+    href: "/beneficiaries",
+    label: "المستفيدين",
+    icon: "beneficiaries" as const,
+    superOnly: false,
   },
   { href: "/routes", label: "الخطوط", icon: "routes" as const, superOnly: false },
   { href: "/buses", label: "الباصات", icon: "buses" as const, superOnly: false },
@@ -62,6 +71,17 @@ function NavIconGlyph({ icon }: { icon: NavIcon }) {
         <path d="M6 21V7l6-4 6 4v14" />
         <path d="M10 11h4" />
         <path d="M10 15h4" />
+      </svg>
+    );
+  }
+
+  if (icon === "beneficiaries") {
+    return (
+      <svg {...common}>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     );
   }
@@ -114,20 +134,51 @@ function NavIconGlyph({ icon }: { icon: NavIcon }) {
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout, loading } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const navItems = allNavItems.filter(
     (item) => !item.superOnly || isSuperAdmin(user)
   );
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
+
   return (
-    <div className="admin-layout">
-      <aside className="sidebar">
+    <div className={`admin-layout${menuOpen ? " menu-open" : ""}`}>
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="admin-sidebar"
+          aria-label={menuOpen ? "إغلاق القائمة" : "فتح القائمة"}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <TrddkWordmark className="topbar-wordmark" />
+      </header>
+      {menuOpen ? (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="إغلاق القائمة"
+          onClick={() => setMenuOpen(false)}
+        />
+      ) : null}
+      <aside id="admin-sidebar" className="sidebar">
         <div className="brand">
-          <img
-            className="brand-logo"
-            src="/icons/tardadi-wordmark.png"
-            alt="شعار ترددي"
-          />
+          <TrddkWordmark className="sidebar-wordmark" />
           <div className="brand-copy">
             <small>لوحة الإدارة</small>
             {!loading && user && (
@@ -144,8 +195,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <nav className="sidebar-nav">
           {navItems.map((item) => {
             const active =
-              item.href === "/"
-                ? pathname === "/"
+              item.href === "/dashboard"
+                ? pathname === "/dashboard"
                 : pathname.startsWith(item.href);
             return (
               <Link

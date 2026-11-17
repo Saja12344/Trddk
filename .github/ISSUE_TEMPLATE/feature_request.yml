@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest an enhancement for TRDDK
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: Target application
+      options:
+        - Admin (Next.js)
+        - Driver (Flutter)
+        - Passenger (Flutter)
+        - Backend / Cloud Functions
+        - Shared / platform
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What user or operator problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of testable outcomes
+      placeholder: |
+        - [ ] Super admin can ...
+        - [ ] API returns ...
+        - [ ] Mobile app handles ...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Impact areas
+      options:
+        - label: Firestore schema / rules
+        - label: API contract (mobile clients)
+        - label: Authentication / RBAC
+        - label: Deployment / secrets
+        - label: Maps / geolocation

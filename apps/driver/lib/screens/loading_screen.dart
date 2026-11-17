@@ -6,11 +6,12 @@ import 'package:tardadi_core/tardadi_core.dart';
 import '../services/driver_prefs.dart';
 import '../services/session_store.dart';
 import '../ui/driver_design.dart';
+import '../widgets/animated_brand_splash.dart';
 import 'login_screen.dart';
 import 'map_screen.dart';
 import 'settings_screen.dart';
 
-/// Splash shown on cold start (loding.png).
+/// Animated TRDDK splash on cold start.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -22,21 +23,36 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(milliseconds: 1200), () {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        driverRoute(builder: (_) => const LoginScreen()),
-      );
-    });
+    unawaited(_openIfPendingOtp());
+  }
+
+  Future<void> _openIfPendingOtp() async {
+    final pending = await DriverPrefs.instance.getPendingOtpPhone();
+    if (!mounted || pending == null) return;
+    _openLogin();
+  }
+
+  void _openLogin() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      driverRoute(builder: (_) => const LoginScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return const _BrandSplash();
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: DriverChrome(
+        barColor: const Color(TrddkBrandAssets.splashNavy),
+        bodyColor: const Color(TrddkBrandAssets.splashNavy),
+        child: AnimatedBrandSplash(onFinished: _openLogin),
+      ),
+    );
   }
 }
 
-/// Brief loader after OTP success, before home or first-time vehicle pick.
+/// Brief loader after login, before home or first-time vehicle pick.
 class LoadingScreen extends StatefulWidget {
   const LoadingScreen({super.key, required this.session});
 
@@ -83,29 +99,16 @@ class _LoadingScreenState extends State<LoadingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const _BrandSplash();
-  }
-}
-
-class _BrandSplash extends StatelessWidget {
-  const _BrandSplash();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DriverChrome(child: _BrandSplashBody());
-  }
-}
-
-class _BrandSplashBody extends StatelessWidget {
-  const _BrandSplashBody();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Image.asset(
-        DriverAssets.mark,
-        width: 88,
-        fit: BoxFit.contain,
+    return const DriverChrome(
+      child: Center(
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: CircularProgressIndicator(
+            color: DriverColors.orange,
+            strokeWidth: 3,
+          ),
+        ),
       ),
     );
   }

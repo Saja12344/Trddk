@@ -17,6 +17,10 @@ const MESSAGE_MAP: Array<[RegExp, string]> = [
   [/name and code are required/i, "اكتب اسم الخط وكوده."],
   [/plateNo and label are required/i, "اكتب رقم اللوحة واسم الباص."],
   [/name and phone are required/i, "اكتب اسم السائق ورقم جواله."],
+  [
+    /اكتب اسم المدير ورقم جواله وكلمة المرور/,
+    "تعذّر إنشاء الشركة. حدّث الصفحة ثم أعد المحاولة.",
+  ],
   [/driver not found/i, "لم نجد هذا السائق."],
   [/route not found/i, "لم نجد هذا الخط."],
   [/trip not found/i, "لم نجد هذه الرحلة."],

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=trddk-dart-defines.sh
+source "$ROOT/scripts/trddk-dart-defines.sh"
 ANDROID_AVD="${ANDROID_AVD:-Tardadi_Passenger}"
 
 if [[ -z "${ANDROID_HOME:-}" ]]; then
@@ -36,20 +38,7 @@ if [[ -z "$ANDROID_AVD" ]]; then
   exit 1
 fi
 
-if ! adb devices 2>/dev/null | grep -qE '^emulator-'; then
-  echo "Starting Android emulator: $ANDROID_AVD"
-  nohup emulator -avd "$ANDROID_AVD" -no-snapshot-load >/tmp/tardadi-emulator.log 2>&1 &
-fi
-
-echo "Waiting for Android emulator to boot..."
-adb wait-for-device
-for _ in $(seq 1 60); do
-  booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
-  if [[ "$booted" == "1" ]]; then
-    break
-  fi
-  sleep 2
-done
+bash "$ROOT/scripts/start-android-emulator.sh"
 
 DEVICE_ID="$(adb devices | awk '/^emulator-/{print $1; exit}')"
 if [[ -z "$DEVICE_ID" ]]; then
@@ -58,4 +47,4 @@ if [[ -z "$DEVICE_ID" ]]; then
 fi
 
 echo "Running passenger app on $DEVICE_ID"
-flutter run -d "$DEVICE_ID"
+flutter run -d "$DEVICE_ID" "${TRDDK_DART_DEFINES[@]}"

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/user_session.dart';
+import '../ui/trddk_typography.dart';
 import '../widgets/onboarding/onboarding_primary_button.dart';
 import '../widgets/onboarding/onboarding_scale.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
@@ -21,17 +21,24 @@ class AccountTypeScreen extends StatefulWidget {
 class _AccountTypeScreenState extends State<AccountTypeScreen> {
   AccountType _selected = AccountType.personal;
 
-  void _continue() {
+  Future<void> _continue() async {
+    // Personal (public) mode needs no login: go straight to public routes.
     if (_selected == AccountType.personal) {
-      UserSession.instance.setAccountType(AccountType.personal);
-      Navigator.of(context).pushReplacement(
+      await UserSession.instance.setAccountType(AccountType.personal);
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => const RoutesMainScreen()),
+        (_) => false,
       );
       return;
     }
 
+    // Business: sign in with a phone number. Business mode is saved only
+    // after a successful login, so backing out keeps the user in public mode.
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const EnterPhoneScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => const EnterPhoneScreen(),
+      ),
     );
   }
 
@@ -60,7 +67,7 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
                       Text(
                         l10n.accountTypeTitle,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.ubuntu(
+                        style: TrddkTypography.text(
                           color: OnboardingTheme.white,
                           fontSize: scale.s(24),
                           fontWeight: FontWeight.w700,
@@ -71,7 +78,7 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
                       Text(
                         l10n.accountTypeSubtitle,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.ubuntu(
+                        style: TrddkTypography.text(
                           color: OnboardingTheme.white.withValues(
                             alpha: 0.68,
                           ),
@@ -129,8 +136,10 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
                     SizedBox(width: scale.s(10)),
                     Expanded(
                       child: Text(
-                        l10n.businessNote,
-                        style: GoogleFonts.ubuntu(
+                        _selected == AccountType.personal
+                            ? l10n.personalNote
+                            : l10n.businessNote,
+                        style: TrddkTypography.text(
                           color: OnboardingTheme.white.withValues(
                             alpha: 0.58,
                           ),
@@ -148,7 +157,7 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
                 label: l10n.next,
                 onPressed: _continue,
               ),
-              SizedBox(height: scale.s(24)),
+              SizedBox(height: scale.s(8)),
             ],
           ),
         ),

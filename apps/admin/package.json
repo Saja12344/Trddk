@@ -4,12 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
+    "prebuild": "node validate-production.mjs",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --pretty false --module nodenext --moduleResolution nodenext --target es2022 --skipLibCheck --rootDir src/lib --outDir test/.generated src/lib/adminSessionToken.ts src/lib/adminTenantScope.ts && node --test test/admin-session.test.mjs"
   },
   "dependencies": {
     "@tardadi/shared": "*",
+    "@vis.gl/react-google-maps": "^1.9.0",
+    "firebase": "^11.8.1",
+    "google-auth-library": "^10.9.1",
     "leaflet": "^1.9.4",
     "next": "^15.3.2",
     "react": "^19.1.0",

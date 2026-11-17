@@ -19,6 +19,9 @@ export const COLLECTIONS = {
   /** @deprecated Alias for businesses — used during migration. */
   organizations: "businesses",
   adminUsers: "admin_users",
+  /** Firebase Auth user profiles (primary auth store). */
+  users: "users",
+  memberships: "memberships",
   drivers: "drivers",
   buses: "buses",
   routes: "routes",
@@ -26,6 +29,10 @@ export const COLLECTIONS = {
   trips: "trips",
   gpsLogs: "gps_logs",
   reminders: "reminders",
+  passengerOtp: "passenger_otp",
+  driverOtp: "driver_otp",
+  adminOtp: "admin_otp",
+  adminMfaChallenges: "admin_mfa_challenges",
 } as const;
 
 export function businessPath(businessId: string): string {

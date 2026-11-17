@@ -14,6 +14,8 @@ import { api } from "@/lib/api";
 import { adminFetch } from "@/lib/adminFetch";
 import { getUserErrorMessage } from "@/lib/errorMessage";
 import { useAuth } from "@/components/AuthProvider";
+import { CompanyManagerPanel } from "@/components/CompanyManagerPanel";
+import type { CompanyManagerSummary } from "@tardadi/shared";
 
 type Tab =
   | "overview"
@@ -31,6 +33,8 @@ interface BusinessDetail {
   status: string;
   adminName?: string | null;
   adminPhone?: string | null;
+  adminEmail?: string | null;
+  manager?: CompanyManagerSummary | null;
   stats: BusinessStats;
 }
 
@@ -300,21 +304,37 @@ export default function BusinessDetailPage() {
       )}
 
       {tab === "admin" && business && (
-        <div className="card">
-          <h3>مدير الشركة</h3>
-          <p>
-            <strong>الاسم:</strong> {business.adminName || "—"}
-          </p>
-          <p>
-            <strong>الجوال:</strong>{" "}
-            <span dir="ltr">{business.adminPhone || "—"}</span>
-          </p>
-          {user?.role === "super_admin" && (
-            <p className="muted">
-              لتعديل بيانات المدير، استخدم صفحة الشركات أو عدّل الشركة من الإجراءات.
+        user?.role === "super_admin" ? (
+          <CompanyManagerPanel
+            businessId={businessId}
+            manager={{
+              uid: business.manager?.uid ?? null,
+              name: business.manager?.name || business.adminName || null,
+              email: business.manager?.email || business.adminEmail || null,
+              phone: business.manager?.phone || business.adminPhone || null,
+              role: "business_admin",
+              accountStatus: business.manager?.accountStatus ?? "incomplete",
+              invitationStatus:
+                business.manager?.invitationStatus ??
+                (business.adminEmail ? "invitation_pending" : "incomplete"),
+              emailVerified: business.manager?.emailVerified ?? false,
+              mfaEnabled: true,
+              lastLoginAt: business.manager?.lastLoginAt ?? null,
+            }}
+            onUpdated={() => void load()}
+          />
+        ) : (
+          <div className="card">
+            <h3>مدير الشركة</h3>
+            <p>
+              <strong>الاسم:</strong> {business.adminName || "—"}
             </p>
-          )}
-        </div>
+            <p>
+              <strong>البريد:</strong>{" "}
+              <span dir="ltr">{business.adminEmail || "—"}</span>
+            </p>
+          </div>
+        )
       )}
     </>
   );

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { COLLECTIONS, normalizePhone } from "@tardadi/shared";
 import { db } from "../firebase";
-import { optionalAdminWithPermission } from "../auth/middleware";
+import { requirePermission } from "../auth/middleware";
+import { DRIVER_WRITE_FIELDS, pickAllowedFields } from "../auth/driverAccess";
 import { resolveBusinessId, requireBusinessId, withBusinessId } from "../auth/scope";
 import {
   listAccessibleBusinessIds,
@@ -9,8 +10,11 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
+
+router.use(rejectStoreReviewAccess);
 
 async function listDriversForBusiness(businessId: string) {
   const snapshot = await businessRef(db, businessId)
@@ -25,7 +29,7 @@ async function listDriversForBusiness(businessId: string) {
   );
 }
 
-router.get("/", optionalAdminWithPermission("drivers:read"), async (req, res) => {
+router.get("/", requirePermission("drivers:read"), async (req, res) => {
   try {
     const businessId = resolveBusinessId(req, req.adminAuth);
     const businessIds = await listAccessibleBusinessIds(
@@ -41,7 +45,7 @@ router.get("/", optionalAdminWithPermission("drivers:read"), async (req, res) =>
   }
 });
 
-router.get("/me", async (req, res) => {
+router.get("/me", requirePermission("drivers:read"), async (req, res) => {
   try {
     const businessId = resolveBusinessId(req, req.adminAuth);
     if (!businessId) {
@@ -78,7 +82,7 @@ router.get("/me", async (req, res) => {
   }
 });
 
-router.post("/", optionalAdminWithPermission("drivers:write"), async (req, res) => {
+router.post("/", requirePermission("drivers:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const {
@@ -139,17 +143,17 @@ router.post("/", optionalAdminWithPermission("drivers:write"), async (req, res) 
   }
 });
 
-router.put("/:driverId", optionalAdminWithPermission("drivers:write"), async (req, res) => {
+router.put("/:driverId", requirePermission("drivers:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const { driverId: rawDriverId } = req.params;
     const driverId = paramId(rawDriverId);
-    const updates = { ...req.body, updatedAt: new Date().toISOString() };
-    delete updates.organizationId;
-    delete updates.businessId;
-    delete updates.driverId;
+    const updates: Record<string, unknown> = {
+      ...pickAllowedFields(req.body ?? {}, DRIVER_WRITE_FIELDS),
+      updatedAt: new Date().toISOString(),
+    };
 
-    if (updates.phone) {
+    if (typeof updates.phone === "string") {
       updates.phone = normalizePhone(updates.phone);
     }
 
@@ -165,7 +169,7 @@ router.put("/:driverId", optionalAdminWithPermission("drivers:write"), async (re
   }
 });
 
-router.delete("/:driverId", optionalAdminWithPermission("drivers:write"), async (req, res) => {
+router.delete("/:driverId", requirePermission("drivers:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const { driverId: rawDriverId } = req.params;

@@ -4,12 +4,18 @@ class LocationPlace {
     required this.latitude,
     required this.longitude,
     this.addressAr,
+    this.addressEn,
   });
 
   final String address;
   final double latitude;
   final double longitude;
   final String? addressAr;
+  final String? addressEn;
+
+  /// Address in the app's language (auto-translated by the API when needed).
+  String displayAddress({required bool arabic}) =>
+      _pick(address, arabic ? addressAr : addressEn);
 
   factory LocationPlace.fromJson(Map<String, dynamic> json) {
     return LocationPlace(
@@ -17,6 +23,7 @@ class LocationPlace {
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
       addressAr: json['addressAr'] as String?,
+      addressEn: json['addressEn'] as String?,
     );
   }
 
@@ -35,10 +42,12 @@ class RouteModel {
     this.toLocation,
     this.polyline,
     this.nameAr,
+    this.nameEn,
     this.stopsCount,
     this.activeBusCount,
     this.liveBusCount,
     this.accessMode = 'public',
+    this.businessId,
   });
 
   final String routeId;
@@ -50,12 +59,18 @@ class RouteModel {
   final LocationPlace? toLocation;
   final String? polyline;
   final String? nameAr;
+  final String? nameEn;
   final int? stopsCount;
   final int? activeBusCount;
   final int? liveBusCount;
   final String accessMode;
+  final String? businessId;
 
   bool get isBusiness => accessMode == 'private';
+
+  /// Route name in the app's language (auto-translated by the API when needed).
+  String displayName({required bool arabic}) =>
+      _pick(name, arabic ? nameAr : nameEn);
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
     final from = json['fromLocation'] as Map<String, dynamic>?;
@@ -70,10 +85,13 @@ class RouteModel {
       toLocation: to == null ? null : LocationPlace.fromJson(to),
       polyline: json['polyline'] as String?,
       nameAr: json['nameAr'] as String?,
+      nameEn: json['nameEn'] as String?,
       stopsCount: (json['stopsCount'] as num?)?.toInt(),
       activeBusCount: (json['activeBusCount'] as num?)?.toInt(),
       liveBusCount: (json['liveBusCount'] as num?)?.toInt(),
       accessMode: json['accessMode'] as String? ?? 'public',
+      businessId: json['businessId'] as String? ??
+          json['organizationId'] as String?,
     );
   }
 }
@@ -87,6 +105,7 @@ class StopModel {
     required this.longitude,
     required this.sequenceNo,
     this.nameAr,
+    this.nameEn,
   });
 
   final String stopId;
@@ -96,6 +115,11 @@ class StopModel {
   final double longitude;
   final int sequenceNo;
   final String? nameAr;
+  final String? nameEn;
+
+  /// Station name in the app's language (auto-translated by the API when needed).
+  String displayName({required bool arabic}) =>
+      _pick(name, arabic ? nameAr : nameEn);
 
   factory StopModel.fromJson(Map<String, dynamic> json) {
     return StopModel(
@@ -106,6 +130,7 @@ class StopModel {
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
       sequenceNo: json['sequenceNo'] as int? ?? 0,
       nameAr: json['nameAr'] as String?,
+      nameEn: json['nameEn'] as String?,
     );
   }
 }
@@ -177,6 +202,7 @@ class DriverModel {
     this.assignedBusId,
     required this.status,
     this.nameAr,
+    this.businessId,
   });
 
   final String driverId;
@@ -187,6 +213,7 @@ class DriverModel {
   final String? assignedBusId;
   final String status;
   final String? nameAr;
+  final String? businessId;
 
   factory DriverModel.fromJson(Map<String, dynamic> json) {
     return DriverModel(
@@ -198,6 +225,8 @@ class DriverModel {
       assignedBusId: json['assignedBusId'] as String?,
       status: json['status'] as String? ?? 'active',
       nameAr: json['nameAr'] as String?,
+      businessId: json['businessId'] as String? ??
+          json['organizationId'] as String?,
     );
   }
 }
@@ -245,6 +274,7 @@ class DriverSession {
     required this.route,
     required this.stops,
     this.tripId,
+    this.sessionToken,
   });
 
   final DriverModel driver;
@@ -252,6 +282,7 @@ class DriverSession {
   final RouteModel route;
   final List<StopModel> stops;
   final String? tripId;
+  final String? sessionToken;
 
   DriverSession copyWith({String? tripId, bool clearTripId = false}) {
     return DriverSession(
@@ -260,6 +291,7 @@ class DriverSession {
       route: route,
       stops: stops,
       tripId: clearTripId ? null : (tripId ?? this.tripId),
+      sessionToken: sessionToken,
     );
   }
 }
@@ -270,12 +302,14 @@ class RouteLiveSnapshot {
     required this.stops,
     required this.buses,
     required this.liveBusCount,
+    this.activeBusCount = 0,
   });
 
   final RouteModel route;
   final List<StopModel> stops;
   final List<BusModel> buses;
   final int liveBusCount;
+  final int activeBusCount;
 
   factory RouteLiveSnapshot.fromJson(Map<String, dynamic> json) {
     return RouteLiveSnapshot(
@@ -287,6 +321,12 @@ class RouteLiveSnapshot {
           .map((e) => BusModel.fromJson(e as Map<String, dynamic>))
           .toList(),
       liveBusCount: (json['liveBusCount'] as num?)?.toInt() ?? 0,
+      activeBusCount: (json['activeBusCount'] as num?)?.toInt() ?? 0,
     );
   }
+}
+
+String _pick(String original, String? localized) {
+  final value = localized?.trim();
+  return value == null || value.isEmpty ? original : value;
 }

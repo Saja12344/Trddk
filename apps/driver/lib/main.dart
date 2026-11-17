@@ -1,6 +1,8 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../firebase_options.dart';
 import '../l10n/app_localizations.dart';
 import '../services/driver_prefs.dart';
 import '../services/locale_notifier.dart';
@@ -8,9 +10,11 @@ import 'screens/loading_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/map_screen.dart';
 import 'ui/driver_design.dart';
+import '../ui/trddk_typography.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await DriverPrefs.instance.init();
   await LocaleNotifier.instance.loadSaved();
   SystemChrome.setSystemUIOverlayStyle(
@@ -35,10 +39,13 @@ class TardadiDriverApp extends StatelessWidget {
       builder: (context, _) {
         final locale = LocaleNotifier.instance.locale;
         return MaterialApp(
-          title: 'ترددي — سائق',
+          title: 'TRDDK — سائق',
           debugShowCheckedModeBanner: false,
           locale: locale,
-          supportedLocales: AppLocalizations.supportedLocales,
+          supportedLocales: const [
+            Locale('ar'),
+            Locale('en'),
+          ],
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
@@ -47,7 +54,9 @@ class TardadiDriverApp extends StatelessWidget {
               surface: DriverColors.softWhite,
             ),
             scaffoldBackgroundColor: DriverColors.softWhite,
-            fontFamily: locale.languageCode == 'ar' ? null : 'Roboto',
+            textTheme: TrddkTypography.ubuntuTextTheme(
+              ThemeData.light().textTheme,
+            ),
             inputDecorationTheme: const InputDecorationTheme(
               filled: false,
               border: InputBorder.none,
