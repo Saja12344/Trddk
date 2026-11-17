@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-/// TRDDK brand typography — Ubuntu across passenger surfaces.
+/// TRDDK brand typography — bundled Ubuntu (no runtime network fetch).
 abstract final class TrddkTypography {
+  static const fontFamily = 'Ubuntu';
+
   static TextStyle text({
     required double fontSize,
     FontWeight fontWeight = FontWeight.w400,
@@ -10,7 +11,8 @@ abstract final class TrddkTypography {
     double? height,
     double letterSpacing = 0,
   }) {
-    return GoogleFonts.ubuntu(
+    return TextStyle(
+      fontFamily: fontFamily,
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
@@ -20,5 +22,5 @@ abstract final class TrddkTypography {
   }
 
   static TextTheme ubuntuTextTheme(TextTheme base) =>
-      GoogleFonts.ubuntuTextTheme(base);
+      base.apply(fontFamily: fontFamily);
 }

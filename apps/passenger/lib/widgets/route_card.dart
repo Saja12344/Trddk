@@ -1,8 +1,9 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../ui/trddk_blur.dart';
 import '../ui/trddk_typography.dart';
 import 'onboarding/onboarding_scale.dart';
 import 'onboarding/onboarding_theme.dart';
@@ -87,11 +88,11 @@ class RouteCard extends StatelessWidget {
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(OnboardingTheme.figmaCardRadius),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: Container(
+            child: TrddkBlur(
+              sigma: 8,
+              borderRadius:
+                  BorderRadius.circular(OnboardingTheme.figmaCardRadius),
+              child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -183,7 +184,6 @@ class RouteCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
             ),
           ),
         ),
@@ -390,20 +390,28 @@ class LogoWatermark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return const SizedBox.shrink();
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final side = math.min(constraints.maxWidth, constraints.maxHeight) * 1.45;
+        final side =
+            math.min(constraints.maxWidth, constraints.maxHeight) * 0.95;
 
-        return IgnorePointer(
-          child: Align(
-            alignment: alignment,
-            child: Opacity(
-              opacity: opacity,
-              child: Image.asset(
-                'assets/images/logo_icon.png',
-                width: side,
-                height: side,
-                fit: BoxFit.contain,
+        return RepaintBoundary(
+          child: IgnorePointer(
+            child: Align(
+              alignment: alignment,
+              child: Opacity(
+                opacity: opacity,
+                child: Image.asset(
+                  'assets/images/logo_icon.png',
+                  width: side,
+                  height: side,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.low,
+                ),
               ),
             ),
           ),

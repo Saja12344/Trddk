@@ -100,8 +100,8 @@ class AppLocalizations {
       : 'For registered organizations and companies only';
 
   String get businessNote => isArabic
-      ? 'الوصول للأعمال يتطلب إيميل الشركة المسجّل — لا يُستخدم رقم الجوال'
-      : 'Business access requires your registered company email — not a phone number';
+      ? 'تسجيل الدخول برقم الجوال. الإيميل خطوة تحقق لاحقة عند الحاجة.'
+      : 'Sign in with your phone number. Email is only a later verification step.';
 
   String get personalNote => isArabic
       ? 'الحساب الشخصي (عام) لا يحتاج تسجيل دخول — انتقل مباشرة للخطوط العامة'
@@ -130,9 +130,21 @@ class AppLocalizations {
   String get phoneLogin =>
       isArabic ? 'الدخول برقم الجوال' : 'Continue with phone number';
 
+  String get phoneNotRegistered => isArabic
+      ? 'رقم الجوال غير مسجل في أي شركة. تواصل مع الإدارة.'
+      : 'This number is not registered with any company.';
+
+  String get tooManyAttempts => isArabic
+      ? 'محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.'
+      : 'Too many attempts. Wait a moment and try again.';
+
+  String get otpSendFailed => isArabic
+      ? 'تعذر إرسال رمز التحقق. حاول مرة أخرى.'
+      : 'Could not send the verification code. Try again.';
+
   String get phoneLoginUnavailable => isArabic
-      ? 'هذا الرقم يستخدم الحساب الشخصي أو بريد الشركة.'
-      : 'Use personal mode or your company email for this number.';
+      ? 'هذا الرقم غير مفعّل لتسجيل الدخول.'
+      : 'This phone number is not enabled for sign-in.';
 
   String get reviewCodeSubtitle =>
       isArabic ? 'أدخل رمز التحقق' : 'Enter the verification code';
@@ -237,6 +249,16 @@ class AppLocalizations {
     };
   }
 
+  /// Route name in the current language. Uses the API's automatic
+  /// translation (nameAr / nameEn) and falls back to the original name.
+  String routeDisplayName(RouteListItem route) {
+    String? clean(String? v) => (v == null || v.trim().isEmpty) ? null : v.trim();
+    if (isArabic) {
+      return clean(route.nameAr) ?? localizeRouteName(route.name);
+    }
+    return clean(route.nameEn) ?? route.name;
+  }
+
   bool routeNameMatchesQuery(String routeName, String query) {
     if (query.isEmpty) return true;
     final normalized = query.toLowerCase();
@@ -312,6 +334,23 @@ class AppLocalizations {
   String get notificationsPermissionDenied => isArabic
       ? 'فعّل الإشعارات من إعدادات الجهاز لتلقي تنبيهات الباص'
       : 'Enable notifications in device settings to get bus alerts';
+
+  String get locationOffTitle =>
+      isArabic ? 'الموقع غير مفعّل' : 'Location is off';
+
+  String get locationDeniedMessage => isArabic
+      ? 'فعّل صلاحية الموقع لتطبيق ترددك عشان نعرض موقعك والباصات القريبة منك على الخريطة.'
+      : 'Allow location access for TRDDK so we can show you and nearby buses on the map.';
+
+  String get locationServiceOffMessage => isArabic
+      ? 'خدمة الموقع في جهازك مقفلة. شغّلها عشان نعرض موقعك على الخريطة.'
+      : 'Location services are turned off on your device. Turn them on to see your position on the map.';
+
+  String get openSettings => isArabic ? 'فتح الإعدادات' : 'Open settings';
+
+  String get locationAllowButton => isArabic ? 'السماح' : 'Allow';
+
+  String get notNow => isArabic ? 'ليس الآن' : 'Not now';
 }
 
 class AppLocaleScope extends InheritedWidget {

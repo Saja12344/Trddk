@@ -49,14 +49,24 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadLive());
   }
 
+  var _locationPromptShown = false;
+
   Future<void> _loadPassengerPosition() async {
     try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        await _showLocationAlert(serviceOff: true);
+        return;
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        await _showLocationAlert(
+          serviceOff: false,
+          permanentlyDenied: permission == LocationPermission.deniedForever,
+        );
         return;
       }
       final position = await Geolocator.getCurrentPosition(
@@ -70,6 +80,76 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
         );
       });
     } catch (_) {}
+  }
+
+  /// Tells the passenger why their location isn't on the map and offers a
+  /// shortcut to fix it, instead of leaving the map silently without them.
+  Future<void> _showLocationAlert({
+    required bool serviceOff,
+    bool permanentlyDenied = false,
+  }) async {
+    if (!mounted || _locationPromptShown) return;
+    _locationPromptShown = true;
+    final l10n = context.l10n;
+    // On Android a plain "denied" can still be asked again in-app; anything
+    // else needs the system settings.
+    final canAskAgain = !serviceOff && !permanentlyDenied;
+    final action = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: l10n.textDirection,
+        child: AlertDialog(
+          backgroundColor: OnboardingTheme.card,
+          title: Text(
+            l10n.locationOffTitle,
+            style: TrddkTypography.text(
+              color: OnboardingTheme.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            serviceOff ? l10n.locationServiceOffMessage : l10n.locationDeniedMessage,
+            style: TrddkTypography.text(color: OnboardingTheme.muted, fontSize: 15),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                l10n.notNow,
+                style: TrddkTypography.text(color: OnboardingTheme.muted, fontSize: 14),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                canAskAgain ? l10n.locationAllowButton : l10n.openSettings,
+                style: TrddkTypography.text(
+                  color: OnboardingTheme.orange,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action != true) return;
+    if (serviceOff) {
+      await Geolocator.openLocationSettings();
+    } else if (permanentlyDenied) {
+      await Geolocator.openAppSettings();
+    } else {
+      final retry = await Geolocator.requestPermission();
+      if (retry == LocationPermission.deniedForever) {
+        await Geolocator.openAppSettings();
+      } else if (retry == LocationPermission.whileInUse ||
+          retry == LocationPermission.always) {
+        _locationPromptShown = false;
+        unawaited(_loadPassengerPosition());
+      }
+    }
   }
 
   @override
@@ -200,7 +280,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _FullRouteMapScreen(
-          title: context.l10n.localizeRouteName(widget.route.name),
+          title: context.l10n.routeDisplayName(widget.route),
           route: snapshot.route,
           stops: snapshot.stops,
           buses: snapshot.buses,
@@ -214,7 +294,7 @@ class _RouteMapScreenState extends State<RouteMapScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final snapshot = _snapshot;
-    final routeName = l10n.localizeRouteName(widget.route.name);
+    final routeName = l10n.routeDisplayName(widget.route);
     final liveCount = snapshot?.liveBusCount ?? widget.route.liveBusCount;
 
     return Scaffold(

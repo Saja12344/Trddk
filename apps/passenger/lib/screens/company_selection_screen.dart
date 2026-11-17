@@ -40,8 +40,12 @@ class _CompanySelectionScreenState extends State<CompanySelectionScreen> {
         verificationToken: widget.verificationToken,
         businessId: membership.businessId,
       );
+      final identity = session.email.isNotEmpty
+          ? session.email
+          : (session.phone.isNotEmpty ? session.phone : widget.email);
       await UserSession.instance.setBusinessSession(
-        email: session.email,
+        email: identity,
+        phone: session.phone,
         businessId: session.businessId,
         businessName: session.businessName,
         sessionToken: session.sessionToken,

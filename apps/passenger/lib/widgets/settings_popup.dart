@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../screens/enter_email_screen.dart';
+import '../screens/account_type_screen.dart';
+import '../screens/enter_phone_screen.dart';
 import '../services/user_session.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/onboarding/onboarding_typography.dart';
@@ -37,15 +38,27 @@ class SettingsPopup extends StatefulWidget {
 
 class _SettingsPopupState extends State<SettingsPopup> {
   late AppLanguage _language = UserSession.instance.language;
-  late AccountType _mode =
-      UserSession.instance.accountType ?? AccountType.personal;
+  // Business only counts once the user has actually signed in.
+  late AccountType _mode = UserSession.instance.hasBusinessSession
+      ? AccountType.business
+      : AccountType.personal;
 
   Future<void> _apply() async {
     final navigator = Navigator.of(context);
     await UserSession.instance.setLanguage(_language);
     if (!mounted) return;
 
-    final wasBusiness = UserSession.instance.isBusiness;
+    final session = UserSession.instance;
+    final wasBusiness = session.hasBusinessSession;
+    final currentMode =
+        wasBusiness ? AccountType.business : AccountType.personal;
+
+    // Only the language changed: apply it and stay where we are.
+    if (_mode == currentMode) {
+      widget.onChanged();
+      navigator.pop();
+      return;
+    }
 
     if (_mode == AccountType.personal) {
       await UserSession.instance.setAccountType(AccountType.personal);
@@ -57,20 +70,15 @@ class _SettingsPopupState extends State<SettingsPopup> {
       return;
     }
 
-    await UserSession.instance.setAccountType(AccountType.business);
+    // Don't switch to business until the phone login succeeds; backing out
+    // of the login keeps the user in public mode.
     navigator.pop();
-
-    if (wasBusiness && UserSession.instance.hasBusinessSession) {
-      widget.onChanged();
-      return;
-    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!navigator.mounted) return;
       navigator.push(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              const EnterEmailScreen(accountType: AccountType.business),
+          builder: (_) => const EnterPhoneScreen(),
         ),
       );
     });
@@ -83,7 +91,7 @@ class _SettingsPopupState extends State<SettingsPopup> {
     navigator.pop();
     navigator.pushAndRemoveUntil(
       MaterialPageRoute<void>(
-        builder: (_) => const EnterEmailScreen(accountType: AccountType.business),
+        builder: (_) => const AccountTypeScreen(),
       ),
       (_) => false,
     );

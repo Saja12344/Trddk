@@ -108,11 +108,13 @@ class UserSession extends ChangeNotifier {
 
   Future<void> setBusinessSession({
     required String email,
+    String? phone,
     required String businessId,
     required String businessName,
     required String sessionToken,
   }) async {
     this.email = email;
+    if (phone != null && phone.isNotEmpty) phoneNumber = phone;
     this.businessId = businessId;
     this.businessName = businessName;
     this.sessionToken = sessionToken;

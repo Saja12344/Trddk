@@ -33,10 +33,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _finishOnboarding({required bool requestLocation}) async {
-    await AppPermissions.requestOnboardingPermissions(
-      requestLocation: requestLocation,
-    );
+    // Save first, so onboarding never shows again even if a permission
+    // prompt fails on some devices.
     await UserSession.instance.markOnboardingCompleted();
+    try {
+      await AppPermissions.requestOnboardingPermissions(
+        requestLocation: requestLocation,
+      );
+    } catch (error) {
+      debugPrint('Onboarding permissions failed: $error');
+    }
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(builder: (_) => const AccountTypeScreen()),

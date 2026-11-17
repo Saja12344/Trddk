@@ -8,7 +8,6 @@ import '../widgets/onboarding/onboarding_scale.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/onboarding/tardadi_logo.dart';
 import '../widgets/route_card.dart';
-import 'enter_email_screen.dart';
 import 'enter_phone_screen.dart';
 import 'routes_main_screen.dart';
 
@@ -23,20 +22,22 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
   AccountType _selected = AccountType.personal;
 
   Future<void> _continue() async {
-    await UserSession.instance.setAccountType(_selected);
-
+    // Personal (public) mode needs no login: go straight to public routes.
     if (_selected == AccountType.personal) {
+      await UserSession.instance.setAccountType(AccountType.personal);
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => const RoutesMainScreen()),
+        (_) => false,
       );
       return;
     }
 
-    if (!mounted) return;
+    // Business: sign in with a phone number. Business mode is saved only
+    // after a successful login, so backing out keeps the user in public mode.
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => EnterEmailScreen(accountType: AccountType.business),
+        builder: (_) => const EnterPhoneScreen(),
       ),
     );
   }
@@ -155,23 +156,6 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
                 scale: scale,
                 label: l10n.next,
                 onPressed: _continue,
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const EnterPhoneScreen(),
-                    ),
-                  );
-                },
-                child: Text(
-                  l10n.phoneLogin,
-                  style: TrddkTypography.text(
-                    color: OnboardingTheme.white.withValues(alpha: 0.82),
-                    fontSize: scale.s(14),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
               SizedBox(height: scale.s(8)),
             ],

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:tardadi_core/tardadi_core.dart';
 
@@ -9,9 +10,14 @@ class AnimatedBrandSplash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final duration = defaultTargetPlatform == TargetPlatform.android
+        ? const Duration(milliseconds: 900)
+        : const Duration(milliseconds: 2400);
+
     return TrddkBrandSplash(
       onFinished: onFinished,
       scaleFactor: trddkSplashScaleFactor(context),
+      duration: duration,
     );
   }
 }

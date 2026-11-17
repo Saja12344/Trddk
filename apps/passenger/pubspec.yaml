@@ -1,7 +1,7 @@
 name: tardadi_passenger
 description: TRDDK — تطبيق الموظفين
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.2+6
 
 environment:
   sdk: ^3.11.5
@@ -13,8 +13,6 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   geolocator: ^14.0.2
-  google_fonts: ^6.2.1
-  flutter_map: ^8.1.1
   google_maps_flutter: ^2.12.1
   latlong2: ^0.9.1
   permission_handler: ^12.0.1
@@ -38,10 +36,21 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/images/app_icon.png
+  adaptive_icon_background: "#0B1120"
+  adaptive_icon_foreground: assets/images/app_icon.png
   remove_alpha_ios: true
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Ubuntu
+      fonts:
+        - asset: assets/fonts/Ubuntu-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Ubuntu-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Ubuntu-Bold.ttf
+          weight: 700
   assets:
     - assets/images/logo_icon.png
     - assets/images/logo_full.png

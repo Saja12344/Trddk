@@ -11,6 +11,7 @@ class RouteListItem {
     required this.stationsCountLabel,
     required this.isBusiness,
     this.nameAr,
+    this.nameEn,
     this.route,
     this.businessId,
     this.stopsCount = 0,
@@ -21,6 +22,7 @@ class RouteListItem {
   final String routeId;
   final String name;
   final String? nameAr;
+  final String? nameEn;
   final String frequencyLabel;
   final String busCountLabel;
   final String stationsCountLabel;
@@ -39,6 +41,7 @@ class RouteListItem {
       routeId: route.routeId,
       name: route.name,
       nameAr: route.nameAr,
+      nameEn: route.nameEn,
       frequencyLabel: live > 0 ? 'Live' : 'Scheduled',
       busCountLabel: live > 0 ? '$live live / $active' : '$active Buses',
       stationsCountLabel: '$stations Stations',

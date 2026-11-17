@@ -38,20 +38,7 @@ if [[ -z "$ANDROID_AVD" ]]; then
   exit 1
 fi
 
-if ! adb devices 2>/dev/null | grep -qE '^emulator-'; then
-  echo "Starting Android emulator: $ANDROID_AVD"
-  nohup emulator -avd "$ANDROID_AVD" -no-snapshot-load >/tmp/tardadi-emulator.log 2>&1 &
-fi
-
-echo "Waiting for Android emulator to boot..."
-adb wait-for-device
-for _ in $(seq 1 60); do
-  booted="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
-  if [[ "$booted" == "1" ]]; then
-    break
-  fi
-  sleep 2
-done
+bash "$ROOT/scripts/start-android-emulator.sh"
 
 DEVICE_ID="$(adb devices | awk '/^emulator-/{print $1; exit}')"
 if [[ -z "$DEVICE_ID" ]]; then
