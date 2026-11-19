@@ -556,6 +556,24 @@ class TardadiApi {
       ),
     );
   }
+
+  Future<void> deleteDriverAccount() {
+    return _request(
+      '/api/auth/driver-delete-account',
+      method: 'POST',
+      body: const {},
+      parser: (_) {},
+    );
+  }
+
+  Future<void> deletePassengerAccount() {
+    return _request(
+      '/api/auth/passenger-delete-account',
+      method: 'POST',
+      body: const {},
+      parser: (_) {},
+    );
+  }
 }
 
 class DriverNavigationStep {

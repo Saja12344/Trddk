@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import BusinessSwitcher from "./BusinessSwitcher";
+import AccountDeletionAlerts from "./AccountDeletionAlerts";
 import { isSuperAdmin } from "@/lib/auth.constants";
 import TrddkWordmark from "./TrddkWordmark";
 
@@ -185,6 +186,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         </div>
 
         <BusinessSwitcher />
+
+        <AccountDeletionAlerts />
 
         <nav className="sidebar-nav">
           {navItems.map((item) => {

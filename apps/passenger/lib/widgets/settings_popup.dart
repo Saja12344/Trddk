@@ -1,8 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../screens/account_type_screen.dart';
 import '../screens/enter_phone_screen.dart';
+import '../services/passenger_api.dart';
 import '../services/user_session.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/onboarding/onboarding_typography.dart';
@@ -41,6 +43,7 @@ class _SettingsPopupState extends State<SettingsPopup> {
   late AccountType _mode = UserSession.instance.hasBusinessSession
       ? AccountType.business
       : AccountType.personal;
+  var _deleting = false;
 
   Future<void> _apply() async {
     final navigator = Navigator.of(context);
@@ -94,6 +97,101 @@ class _SettingsPopupState extends State<SettingsPopup> {
       ),
       (_) => false,
     );
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    bool destructive = false,
+  }) {
+    final l10n = context.l10n;
+    final apple = Theme.of(context).platform == TargetPlatform.iOS ||
+        Theme.of(context).platform == TargetPlatform.macOS;
+    if (apple) {
+      return showCupertinoDialog<bool>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(l10n.cancel),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: destructive,
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
+      ).then((value) => value ?? false);
+    }
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              confirmLabel,
+              style: TextStyle(
+                color: destructive ? const Color(0xFFFF6B6B) : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).then((value) => value ?? false);
+  }
+
+  Future<void> _deleteAccount() async {
+    final l10n = context.l10n;
+    final confirmed = await _confirm(
+      title: l10n.deleteAccountTitle,
+      message: l10n.deleteAccountBody,
+      confirmLabel: l10n.delete,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _deleting = true);
+    while (mounted) {
+      try {
+        await createPassengerApi().deletePassengerAccount();
+        if (!mounted) return;
+        await UserSession.instance.clearBusinessSession();
+        if (!mounted) return;
+        final navigator = Navigator.of(context);
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute<void>(
+            builder: (_) => const AccountTypeScreen(),
+          ),
+          (_) => false,
+        );
+        ScaffoldMessenger.of(navigator.context).showSnackBar(
+          SnackBar(content: Text(l10n.deleteAccountDone)),
+        );
+        return;
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _deleting = false);
+        final retry = await _confirm(
+          title: l10n.deleteAccountFailed,
+          message: '$error',
+          confirmLabel: l10n.retry,
+        );
+        if (!retry || !mounted) return;
+        setState(() => _deleting = true);
+      }
+    }
   }
 
   @override
@@ -238,8 +336,24 @@ class _SettingsPopupState extends State<SettingsPopup> {
                     color: OnboardingTheme.muted,
                   ),
                 ),
-              )
-            else
+              ),
+            if (hasBusiness)
+              TextButton.icon(
+                onPressed: _deleting ? null : _deleteAccount,
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFFF6B6B),
+                  minimumSize: const Size.fromHeight(36),
+                ),
+                icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                label: Text(
+                  l10n.deleteAccount,
+                  style: OnboardingTypography.label(
+                    fontSize: 13,
+                    color: const Color(0xFFFF6B6B),
+                  ),
+                ),
+              ),
+            if (!hasBusiness)
               const SizedBox(height: 8),
           ],
         ),

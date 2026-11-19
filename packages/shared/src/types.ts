@@ -1,6 +1,6 @@
 import type { AdminRole } from "./rbac";
 
-export type EntityStatus = "active" | "inactive";
+export type EntityStatus = "active" | "inactive" | "deleted";
 export type TripStatus = "scheduled" | "active" | "ended";
 export type ReminderStatus = "active" | "triggered" | "cancelled";
 export type AccessMode = "public" | "private";
@@ -302,4 +302,15 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+export interface AdminAccountNotification {
+  id: string;
+  type: "account_deleted";
+  role: "driver" | "passenger";
+  businessId: string;
+  displayName: string;
+  phoneLast4: string;
+  createdAt: string;
+  read: boolean;
 }

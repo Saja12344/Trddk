@@ -24,6 +24,19 @@ class AppLocalizations {
   String get next => isArabic ? 'التالي' : 'Next';
   String get save => isArabic ? 'حفظ' : 'Save';
   String get logout => isArabic ? 'تسجيل الخروج' : 'Log out';
+  String get deleteAccount => isArabic ? 'حذف الحساب' : 'Delete account';
+  String get deleteAccountTitle =>
+      isArabic ? 'حذف الحساب؟' : 'Delete your account?';
+  String get deleteAccountBody => isArabic
+      ? 'سيتم حذف حسابك وبياناتك الشخصية نهائيًا وتسجيل خروجك، وسيتم إشعار مشرف شركتك. لا يمكن التراجع عن هذا الإجراء.'
+      : "Your account and personal data will be permanently deleted and you'll be signed out. Your company admin will be notified. This can't be undone.";
+  String get delete => isArabic ? 'حذف' : 'Delete';
+  String get deleteAccountDone =>
+      isArabic ? 'تم حذف الحساب' : 'Account deleted';
+  String get deleteAccountFailed =>
+      isArabic ? 'تعذّر حذف الحساب' : "Couldn't delete the account";
+  String get retry => isArabic ? 'إعادة المحاولة' : 'Retry';
+  String get cancel => isArabic ? 'إلغاء' : 'Cancel';
   String get verify => isArabic ? 'تحقق' : 'Verify';
   String get onboardingStepPlan => isArabic ? '٠١ · خطّط' : '01 · PLAN';
 

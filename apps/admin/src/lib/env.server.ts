@@ -15,6 +15,7 @@ export const ADMIN_PROXY_ALLOWLIST = [
   "trips",
   "businesses",
   "users",
+  "admin-notifications",
   "health",
 ] as const;
 

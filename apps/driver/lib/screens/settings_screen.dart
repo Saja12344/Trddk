@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:tardadi_core/tardadi_core.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/driver_api.dart';
 import '../services/driver_prefs.dart';
-import '../utils/arabic_display.dart';
 import '../services/locale_notifier.dart';
 import '../services/session_store.dart';
 import '../ui/driver_design.dart';
+import '../ui/platform_ui.dart';
+import '../utils/arabic_display.dart';
 import 'map_screen.dart';
 
 const kVehicleOptions = ['Bus', 'Golf car', 'Van', 'Private car'];
@@ -309,12 +311,14 @@ class SettingsScreen extends StatefulWidget {
     required this.selectedVehicle,
     required this.onVehicleChanged,
     required this.onLogout,
+    required this.tripActive,
   });
 
   final DriverSession session;
   final String selectedVehicle;
   final ValueChanged<String> onVehicleChanged;
   final VoidCallback onLogout;
+  final bool tripActive;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -323,6 +327,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late String _vehicle = widget.selectedVehicle;
   bool _notifications = true;
+  bool _deleting = false;
   late bool _english = !LocaleNotifier.instance.isArabic;
 
   @override
@@ -338,7 +343,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await DriverPrefs.instance.setNotificationsEnabled(value);
   }
 
-  /// Language applies immediately — no separate save button.
   Future<void> _setLanguage(bool english) async {
     if (english == _english) return;
     setState(() => _english = english);
@@ -346,6 +350,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
         .setLocale(english ? const Locale('en') : const Locale('ar'));
     if (!mounted) return;
     DriverSnack.show(context, context.l10n.languageSaved);
+  }
+
+  Future<void> _deleteAccount() async {
+    final l10n = context.l10n;
+    if (widget.tripActive) {
+      await showPlatformConfirmDialog(
+        context,
+        title: l10n.endTripBeforeDeleteTitle,
+        message: l10n.endTripBeforeDeleteBody,
+        cancelLabel: l10n.cancel,
+        confirmLabel: l10n.ok,
+      );
+      return;
+    }
+
+    final confirmed = await showPlatformConfirmDialog(
+      context,
+      title: l10n.deleteAccountTitle,
+      message: l10n.deleteAccountBody,
+      cancelLabel: l10n.cancel,
+      confirmLabel: l10n.delete,
+      isDestructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _deleting = true);
+    while (mounted) {
+      try {
+        final session = widget.session;
+        await createDriverApi(
+          organizationId: session.driver.businessId,
+          authToken: session.sessionToken,
+        ).deleteDriverAccount();
+        if (!mounted) return;
+        final driverKey = DriverPrefs.driverKey(
+          phone: session.driver.phone,
+          driverId: session.driver.driverId,
+        );
+        await DriverPrefs.instance.clearAccountData(driverKey: driverKey);
+        SessionStore.instance.clear();
+        if (!mounted) return;
+        final navigator = Navigator.of(context);
+        navigator.pushNamedAndRemoveUntil('/login', (_) => false);
+        ScaffoldMessenger.of(navigator.context).showSnackBar(
+          SnackBar(content: Text(l10n.deleteAccountDone)),
+        );
+        return;
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _deleting = false);
+        final retry = await showPlatformConfirmDialog(
+          context,
+          title: l10n.deleteAccountFailed,
+          message: '$error',
+          cancelLabel: l10n.cancel,
+          confirmLabel: l10n.retry,
+        );
+        if (!retry || !mounted) return;
+        setState(() => _deleting = true);
+      }
+    }
   }
 
   Future<void> _changeVehicle() async {
@@ -365,7 +430,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final displayName = _displayDriverName(context, widget.session);
     final routeSummary = _routeSummary(context, widget.session);
 
-    return DriverSidePanel(
+    return Stack(
+      children: [
+        DriverSidePanel(
       onClose: () => Navigator.pop(context),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -503,6 +570,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.logout_rounded, size: 18),
                       label: Text(l10n.logOut),
                     ),
+                    TextButton.icon(
+                      onPressed: _deleting ? null : _deleteAccount,
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFFF6B6B),
+                        minimumSize: const Size.fromHeight(40),
+                        textStyle: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                      label: Text(l10n.deleteAccount),
+                    ),
                   ],
                 ),
               ),
@@ -510,6 +590,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         },
       ),
+        ),
+        if (_deleting) ...[
+          const ModalBarrier(dismissible: false, color: Color(0x88000000)),
+          const Center(
+            child: CircularProgressIndicator(color: DriverColors.orange),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -42,6 +42,18 @@ class AppLocalizations {
       'vehicle': 'Vehicle',
       'changeVehicle': 'Change vehicle',
       'logOut': 'Log out',
+      'deleteAccount': 'Delete account',
+      'deleteAccountTitle': 'Delete your account?',
+      'deleteAccountBody':
+          'Your account and personal data will be permanently deleted and you\'ll be signed out. Your company admin will be notified. This can\'t be undone.',
+      'delete': 'Delete',
+      'deleteAccountDone': 'Account deleted',
+      'deleteAccountFailed': 'Couldn\'t delete the account',
+      'retry': 'Retry',
+      'endTripBeforeDeleteTitle': 'End the trip first',
+      'endTripBeforeDeleteBody':
+          'End the open trip before deleting your account.',
+      'ok': 'OK',
       'save': 'Save',
       'languageSaved': 'Language updated',
       'chooseVehicle': 'Choose your vehicle',
@@ -165,6 +177,18 @@ class AppLocalizations {
       'vehicle': 'المركبة',
       'changeVehicle': 'تغيير المركبة',
       'logOut': 'تسجيل الخروج',
+      'deleteAccount': 'حذف الحساب',
+      'deleteAccountTitle': 'حذف الحساب؟',
+      'deleteAccountBody':
+          'سيتم حذف حسابك وبياناتك الشخصية نهائيًا وتسجيل خروجك، وسيتم إشعار مشرف شركتك. لا يمكن التراجع عن هذا الإجراء.',
+      'delete': 'حذف',
+      'deleteAccountDone': 'تم حذف الحساب',
+      'deleteAccountFailed': 'تعذّر حذف الحساب',
+      'retry': 'إعادة المحاولة',
+      'endTripBeforeDeleteTitle': 'أنهِ الرحلة أولًا',
+      'endTripBeforeDeleteBody':
+          'أنهِ الرحلة المفتوحة قبل حذف الحساب.',
+      'ok': 'حسنًا',
       'save': 'حفظ',
       'languageSaved': 'تم تحديث اللغة',
       'chooseVehicle': 'اختر مركبتك',
@@ -299,6 +323,16 @@ class AppLocalizations {
   String get vehicle => _t('vehicle');
   String get changeVehicle => _t('changeVehicle');
   String get logOut => _t('logOut');
+  String get deleteAccount => _t('deleteAccount');
+  String get deleteAccountTitle => _t('deleteAccountTitle');
+  String get deleteAccountBody => _t('deleteAccountBody');
+  String get delete => _t('delete');
+  String get deleteAccountDone => _t('deleteAccountDone');
+  String get deleteAccountFailed => _t('deleteAccountFailed');
+  String get retry => _t('retry');
+  String get endTripBeforeDeleteTitle => _t('endTripBeforeDeleteTitle');
+  String get endTripBeforeDeleteBody => _t('endTripBeforeDeleteBody');
+  String get ok => _t('ok');
   String get save => _t('save');
   String get languageSaved => _t('languageSaved');
   String get chooseVehicle => _t('chooseVehicle');

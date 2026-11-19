@@ -66,6 +66,15 @@ class DriverPrefs {
     await _prefs!.setBool(_notificationsKey, enabled);
   }
 
+  /// Drops the local account leftovers after the server deletes the account.
+  Future<void> clearAccountData({required String driverKey}) async {
+    await init();
+    await clearPendingOtp();
+    await _prefs!.remove(_notificationsKey);
+    await _prefs!.remove(_setupKey(driverKey));
+    await _prefs!.remove(_vehicleKey(driverKey));
+  }
+
   Future<bool> isNavVoiceMuted() async {
     await init();
     return _prefs!.getBool(_navVoiceMutedKey) ?? false;

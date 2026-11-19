@@ -483,6 +483,73 @@ router.post("/admin-mfa-verify", async (req, res) => {
   }
 });
 
+router.post("/driver-delete-account", async (req, res) => {
+  try {
+    if (!loginRateAllowed(res, "driver-delete", clientRateKey(req))) return;
+    const { bearerToken, parseDriverSessionToken } = await import(
+      "../auth/driverAccess"
+    );
+    const { isReviewDriverIdentity } = await import(
+      "../services/accountDeletion"
+    );
+    const token = bearerToken(req);
+    const session = token ? parseDriverSessionToken(token) : null;
+    if (!session) {
+      fail(res, "يجب تسجيل الدخول.", 401);
+      return;
+    }
+    if (isReviewDriverIdentity(session.driverId, session.businessId)) {
+      ok(res, { deleted: false, review: true });
+      return;
+    }
+    const { deleteDriverAccount } = await import(
+      "../services/accountDeletionRun"
+    );
+    ok(res, await deleteDriverAccount(session.driverId, session.businessId));
+  } catch (error) {
+    fail(res, (error as Error).message, 500);
+  }
+});
+
+router.post("/passenger-delete-account", async (req, res) => {
+  try {
+    if (!loginRateAllowed(res, "passenger-delete", clientRateKey(req))) return;
+    const { requestIsPassengerReview } = await import(
+      "../services/passengerReview"
+    );
+    if (requestIsPassengerReview(req)) {
+      ok(res, { deleted: false, review: true });
+      return;
+    }
+    const { bearerToken } = await import("../auth/driverAccess");
+    const { parsePassengerSessionToken } = await import(
+      "../services/passengerSession"
+    );
+    const { isReviewPassengerIdentity } = await import(
+      "../services/accountDeletion"
+    );
+    const token = bearerToken(req);
+    const session = token ? parsePassengerSessionToken(token) : null;
+    if (!session?.sub) {
+      fail(res, "يجب تسجيل الدخول.", 401);
+      return;
+    }
+    if (isReviewPassengerIdentity(session.sub, session.phone)) {
+      ok(res, { deleted: false, review: true });
+      return;
+    }
+    const { deletePassengerAccount } = await import(
+      "../services/accountDeletionRun"
+    );
+    ok(
+      res,
+      await deletePassengerAccount(session.sub, session.businessId)
+    );
+  } catch (error) {
+    fail(res, (error as Error).message, 500);
+  }
+});
+
 router.post("/admin-mfa-resend", async (req, res) => {
   try {
     const { challengeToken } = req.body as { challengeToken?: string };

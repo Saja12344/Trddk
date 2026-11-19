@@ -13,6 +13,7 @@ import tripsRouter from "./routes/trips";
 import gpsRouter from "./routes/gps";
 import remindersRouter from "./routes/reminders";
 import usersRouter from "./routes/users";
+import adminNotificationsRouter from "./routes/adminNotifications";
 import { navigationRouter } from "./routes/routing";
 import { attachAdminAuth } from "./auth/middleware";
 import { closeStaleTrips } from "./jobs/closeStaleTrips";
@@ -51,6 +52,7 @@ app.use("/api/trips", tripsRouter);
 app.use("/api/gps", gpsRouter);
 app.use("/api/reminders", remindersRouter);
 app.use("/api/users", usersRouter);
+app.use("/api/admin-notifications", adminNotificationsRouter);
 app.use("/api/routing", navigationRouter);
 
 export const closeInactiveTrips = onSchedule(

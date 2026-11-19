@@ -24,12 +24,14 @@ async function listDriversForBusiness(businessId: string) {
     .collection(COLLECTIONS.drivers)
     .get();
 
-  return snapshot.docs.map((doc) =>
-    withBusinessId(businessId, {
-      driverId: doc.id,
-      ...doc.data(),
-    })
-  );
+  return snapshot.docs
+    .filter((doc) => doc.data().status !== "deleted")
+    .map((doc) =>
+      withBusinessId(businessId, {
+        driverId: doc.id,
+        ...doc.data(),
+      })
+    );
 }
 
 router.get("/", requirePermission("drivers:read"), async (req, res) => {

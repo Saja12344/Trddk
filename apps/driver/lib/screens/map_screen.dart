@@ -558,6 +558,7 @@ class _MapScreenState extends State<MapScreen>
             SessionStore.instance.clear();
             Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
           },
+          tripActive: _tripActive,
         ),
       ),
     );

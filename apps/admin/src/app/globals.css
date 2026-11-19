@@ -1777,3 +1777,63 @@ tbody tr:hover {
 .muted {
   color: var(--grey);
 }
+
+.account-alerts {
+  margin: 0 16px 12px;
+}
+
+.account-alerts-bell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.account-alerts-badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ff6b6b;
+  color: #fff;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.account-alerts-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-alerts-list li {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.account-alerts-list p {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.account-alerts-list button {
+  border: 0;
+  background: transparent;
+  color: var(--grey);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+

@@ -8,6 +8,10 @@ import {
   requestedBusinessId,
   scopedBusinessId,
 } from "./driverAccess";
+import { COLLECTIONS } from "@tardadi/shared";
+import { db } from "../firebase";
+import { businessRef } from "../business/helpers";
+import { isReviewDriverIdentity } from "../services/accountDeletion";
 import { parsePassengerSessionToken } from "../services/passengerSession";
 
 const LOGIN_REQUIRED = "يجب تسجيل الدخول للوصول لهذا الطلب.";
@@ -23,14 +27,24 @@ function deny(res: Response, status: number, error: string): void {
   res.status(status).json({ success: false, error });
 }
 
-export function requireTripWriter(
+export async function requireTripWriter(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const token = bearerToken(req);
   const driver = token ? parseDriverSessionToken(token) : null;
   if (driver) {
+    if (!isReviewDriverIdentity(driver.driverId, driver.businessId)) {
+      const snap = await businessRef(db, driver.businessId)
+        .collection(COLLECTIONS.drivers)
+        .doc(driver.driverId)
+        .get();
+      if (!snap.exists || snap.data()?.status === "deleted") {
+        deny(res, 401, LOGIN_REQUIRED);
+        return;
+      }
+    }
     req.driverAuth = driver;
     next();
     return;
