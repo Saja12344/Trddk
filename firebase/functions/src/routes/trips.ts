@@ -12,6 +12,7 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, ok } from "../utils";
+import { finalizeTrip } from "../jobs/closeStaleTrips";
 import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
@@ -307,21 +308,11 @@ router.post("/end", requireTripWriter, async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    await tripRef.update({
-      tripStatus: "ended",
+    await finalizeTrip({
+      businessId,
+      tripId,
       endedAt: now,
-      onBreak: false,
-      breakStartedAt: null,
-      updatedAt: now,
     });
-
-    await businessRef(db, businessId)
-      .collection(COLLECTIONS.buses)
-      .doc(tripData.busId as string)
-      .update({
-        currentTripId: null,
-        updatedAt: now,
-      });
 
     ok(res, { tripId, tripStatus: "ended", endedAt: now });
   } catch (error) {

@@ -463,8 +463,8 @@ router.patch(
         fail(res, "ليس لديك صلاحية لهذه الشركة.", 403);
         return;
       }
-      await updateEmployeeMembership(businessId, uid, req.body ?? {});
-      ok(res, { updated: true });
+      const result = await updateEmployeeMembership(businessId, uid, req.body ?? {});
+      ok(res, { updated: true, driverId: result.driverId });
     } catch (error) {
       fail(res, (error as Error).message, 400);
     }

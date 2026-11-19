@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Bus, Driver, Route } from "@tardadi/shared";
 import { requireSaudiMobile } from "@tardadi/shared";
 import { adminFetch } from "@/lib/adminFetch";
+import { api } from "@/lib/api";
 
 type EmployeeRecord = {
   uid: string;
@@ -12,9 +14,6 @@ type EmployeeRecord = {
   status: string;
   roleLabel: string;
   driverId: string | null;
-  driverName: string | null;
-  hasPassword: boolean;
-  joinedAt: string | null;
   membership: {
     status: string;
     role: string;
@@ -23,47 +22,115 @@ type EmployeeRecord = {
   };
 };
 
-type Filter =
-  | "all"
-  | "passenger"
-  | "driver"
-  | "both"
-  | "active"
-  | "inactive"
-  | "pending";
+type AppRole = "passenger" | "driver" | "admin";
+type Filter = "all" | AppRole;
+
+type PersonRow = {
+  key: string;
+  uid: string | null;
+  driverId: string | null;
+  name: string;
+  phone: string | null;
+  email: string;
+  role: AppRole | "both";
+  status: string;
+  driverStatus: string | null;
+  routeId: string;
+  busId: string;
+};
+
+type EditDraft = {
+  key: string;
+  uid: string | null;
+  driverId: string | null;
+  name: string;
+  phone: string;
+  email: string;
+  role: AppRole;
+  wasBoth: boolean;
+  routeId: string;
+  busId: string;
+};
 
 type Props = {
   businessId: string;
 };
 
-const ROLE_LABELS: Record<string, string> = {
+const ROLE_LABELS: Record<PersonRow["role"], string> = {
   passenger: "راكب",
   driver: "سائق",
-  both: "راكب وسائق",
+  admin: "أدمن",
+  both: "سائق وراكب",
 };
+
+function phoneKey(phone?: string | null) {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("966")) return digits.slice(3);
+  if (digits.startsWith("0")) return digits.slice(1);
+  return digits;
+}
+
+function statusLabel(status: string) {
+  if (status === "active") return "نشط";
+  if (status === "suspended" || status === "inactive") return "معطّل";
+  if (status === "pending") return "معلّق";
+  return status;
+}
+
+function employeeRole(employee: EmployeeRecord): PersonRow["role"] {
+  if (employee.membership.role === "business_admin") return "admin";
+  if (employee.roleLabel === "both") return "both";
+  if (employee.roleLabel === "driver" || employee.membership.role === "driver") {
+    return "driver";
+  }
+  return "passenger";
+}
 
 export function BusinessEmployeesPanel({ businessId }: Props) {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [buses, setBuses] = useState<Bus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [message, setMessage] = useState("");
-  const [editingUid, setEditingUid] = useState<string | null>(null);
-  const [phoneDraft, setPhoneDraft] = useState("");
+  const [edit, setEdit] = useState<EditDraft | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const data = await adminFetch<EmployeeRecord[]>(
+      const people = await adminFetch<EmployeeRecord[]>(
         `/api/businesses/${businessId}/employees`
       );
-      setEmployees(data);
+      setEmployees(people);
+      try {
+        const driverRows = (await api.getDrivers()) as Driver[];
+        setDrivers(
+          driverRows.filter((driver) => driver.businessId === businessId)
+        );
+      } catch {
+        setDrivers([]);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
+    }
+
+    try {
+      const [routeRows, busRows] = await Promise.all([
+        api.getRoutes() as Promise<Route[]>,
+        api.getBuses() as Promise<Bus[]>,
+      ]);
+      setRoutes(routeRows.filter((route) => route.businessId === businessId));
+      setBuses(busRows.filter((bus) => bus.businessId === businessId));
+    } catch {
+      /* assignment lists are optional until routes exist */
     }
   }, [businessId]);
 
@@ -71,101 +138,261 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
     void load();
   }, [load]);
 
+  const rows = useMemo(() => {
+    const driverById = new Map(drivers.map((driver) => [driver.driverId, driver]));
+    const usedPhones = new Set<string>();
+    const people: PersonRow[] = employees.map((employee) => {
+      const role = employeeRole(employee);
+      const linked = employee.driverId
+        ? driverById.get(employee.driverId)
+        : drivers.find((driver) => phoneKey(driver.phone) === phoneKey(employee.phone));
+      if (employee.phone) usedPhones.add(phoneKey(employee.phone));
+      if (linked?.phone) usedPhones.add(phoneKey(linked.phone));
+      const accountStatus =
+        employee.status === "suspended" || employee.membership.status === "suspended"
+          ? "suspended"
+          : employee.status;
+      return {
+        key: employee.uid,
+        uid: employee.uid,
+        driverId: linked?.driverId ?? employee.driverId,
+        name: employee.displayName,
+        phone: employee.phone ?? linked?.phone ?? null,
+        email: employee.email,
+        role,
+        status: accountStatus,
+        driverStatus: linked?.status ?? null,
+        routeId: linked?.assignedRouteId ?? "",
+        busId: linked?.assignedBusId ?? "",
+      };
+    });
+
+    for (const driver of drivers) {
+      const key = phoneKey(driver.phone);
+      if (key && usedPhones.has(key)) continue;
+      people.push({
+        key: `driver:${driver.driverId}`,
+        uid: null,
+        driverId: driver.driverId,
+        name: driver.name,
+        phone: driver.phone,
+        email: "",
+        role: "driver",
+        status: driver.status === "active" ? "active" : "inactive",
+        driverStatus: driver.status,
+        routeId: driver.assignedRouteId ?? "",
+        busId: driver.assignedBusId ?? "",
+      });
+    }
+
+    return people.sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  }, [drivers, employees]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return employees.filter((e) => {
+    return rows.filter((row) => {
       if (q) {
-        const hay = `${e.displayName} ${e.email} ${e.phone ?? ""}`.toLowerCase();
+        const hay = `${row.name} ${row.phone ?? ""} ${row.email}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
-      switch (filter) {
-        case "passenger":
-          return e.roleLabel === "passenger";
-        case "driver":
-          return e.roleLabel === "driver";
-        case "both":
-          return e.roleLabel === "both";
-        case "active":
-          return e.membership.status === "active" && e.status === "active";
-        case "inactive":
-          return e.status === "suspended" || e.membership.status === "suspended";
-        case "pending":
-          return e.membership.status === "pending" || !e.hasPassword;
-        default:
-          return true;
-      }
+      if (filter === "all") return true;
+      if (filter === "driver") return row.role === "driver" || row.role === "both";
+      return row.role === filter;
     });
-  }, [employees, search, filter]);
+  }, [filter, rows, search]);
 
-  async function patchEmployee(
-    uid: string,
-    body: Record<string, unknown>,
-    confirmMsg: string
-  ) {
-    if (!window.confirm(confirmMsg)) return;
-    setMessage("");
-    try {
-      await adminFetch(`/api/businesses/${businessId}/employees/${uid}`, {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      });
-      setMessage("تم التحديث.");
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    }
+  function openEdit(row: PersonRow) {
+    setError("");
+    setEdit({
+      key: row.key,
+      uid: row.uid,
+      driverId: row.driverId,
+      name: row.name,
+      phone: row.phone ?? "",
+      email: row.email,
+      role: row.role === "both" ? "driver" : row.role,
+      wasBoth: row.role === "both",
+      routeId: row.routeId,
+      busId: row.busId,
+    });
   }
 
-  async function savePhone(uid: string) {
+  async function saveDriverAssignment(
+    driverId: string,
+    phone: string,
+    name: string,
+    routeId: string,
+    busId: string,
+    status: "active" | "inactive" = "active"
+  ) {
+    await adminFetch(`/api/drivers/${driverId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name,
+        phone,
+        status,
+        assignedRouteId: routeId || null,
+        assignedBusId: busId || null,
+      }),
+    });
+  }
+
+  async function saveEdit() {
+    if (!edit) return;
+    setSaving(true);
     setError("");
     setMessage("");
     let phone = "";
     try {
-      phone = requireSaudiMobile(phoneDraft);
+      phone = requireSaudiMobile(edit.phone);
     } catch (err) {
       setError((err as Error).message);
+      setSaving(false);
       return;
     }
+    if (edit.role === "admin" && !edit.email.trim()) {
+      setError("حساب الأدمن يحتاج بريداً للدخول إلى لوحة الإدارة.");
+      setSaving(false);
+      return;
+    }
+
     try {
-      await adminFetch(`/api/businesses/${businessId}/employees/${uid}`, {
-        method: "PATCH",
-        body: JSON.stringify({ phone }),
-      });
-      setMessage("تم تحديث رقم الجوال.");
-      setEditingUid(null);
-      setPhoneDraft("");
+      if (!edit.uid) {
+        const created = await adminFetch<{ uid: string }>("/api/users/invite", {
+          method: "POST",
+          body: JSON.stringify({
+            phone,
+            email: edit.email.trim() || undefined,
+            displayName: edit.name,
+            primaryRole:
+              edit.role === "admin"
+                ? "business_admin"
+                : edit.role === "driver"
+                  ? "driver"
+                  : "employee",
+            membershipRole:
+              edit.role === "admin"
+                ? "business_admin"
+                : edit.role === "driver"
+                  ? "driver"
+                  : "employee",
+            businessId,
+          }),
+        });
+        const linked = await adminFetch<{ driverId: string | null }>(
+          `/api/businesses/${businessId}/employees/${created.uid}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              phone,
+              appRole: edit.role,
+              passengerAccess: edit.role === "passenger",
+              driverAccess: edit.role === "driver",
+              ...(edit.email.trim() ? { email: edit.email.trim() } : {}),
+            }),
+          }
+        );
+        const driverId = linked?.driverId || edit.driverId;
+        if (edit.role === "driver" && driverId) {
+          await saveDriverAssignment(
+            driverId,
+            phone,
+            edit.name,
+            edit.routeId,
+            edit.busId
+          );
+        }
+      } else {
+        const result = await adminFetch<{ driverId: string | null }>(
+          `/api/businesses/${businessId}/employees/${edit.uid}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              phone,
+              appRole: edit.role,
+              passengerAccess: edit.role === "passenger",
+              driverAccess: edit.role === "driver",
+              ...(edit.role === "admin" ? { email: edit.email.trim() } : {}),
+            }),
+          }
+        );
+        const driverId = result?.driverId || edit.driverId;
+        if (edit.role === "driver" && driverId) {
+          await saveDriverAssignment(
+            driverId,
+            phone,
+            edit.name,
+            edit.routeId,
+            edit.busId
+          );
+        } else if (edit.role === "driver" && !driverId) {
+          await adminFetch("/api/drivers", {
+            method: "POST",
+            body: JSON.stringify({
+              name: edit.name,
+              phone,
+              assignedRouteId: edit.routeId,
+              assignedBusId: edit.busId,
+            }),
+          });
+        }
+      }
+
+      setMessage("تم حفظ التعديل.");
+      setEdit(null);
       await load();
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function removeEmployee(uid: string, name: string) {
+  async function toggleStatus(row: PersonRow) {
+    const disabling = row.status === "active";
     if (
       !window.confirm(
-        `إزالة "${name}" من الشركة؟ سيتم إلغاء وصوله للمسارات الخاصة مع الإبقاء على السجلات التاريخية.`
+        disabling ? `تعطيل ${row.name}؟` : `تفعيل ${row.name}؟`
       )
     ) {
       return;
     }
+    setError("");
+    setMessage("");
     try {
-      await adminFetch(`/api/businesses/${businessId}/employees/${uid}`, {
-        method: "DELETE",
-      });
-      setMessage("تمت الإزالة من الشركة.");
+      if (row.uid) {
+        await adminFetch(`/api/businesses/${businessId}/employees/${row.uid}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: disabling ? "suspended" : "active" }),
+        });
+      } else if (row.driverId) {
+        await adminFetch(`/api/drivers/${row.driverId}`, {
+          method: "PUT",
+          body: JSON.stringify({ status: disabling ? "inactive" : "active" }),
+        });
+      }
+      setMessage(disabling ? "تم التعطيل." : "تم التفعيل.");
       await load();
     } catch (err) {
       setError((err as Error).message);
     }
   }
 
-  async function resendInvite(uid: string) {
+  async function removePerson(row: PersonRow) {
+    if (!window.confirm(`حذف ${row.name}؟`)) return;
+    setError("");
+    setMessage("");
     try {
-      await adminFetch(
-        `/api/businesses/${businessId}/employees/${uid}/resend-invite`,
-        { method: "POST", body: "{}" }
-      );
-      setMessage("تم إرسال الدعوة.");
+      if (row.uid) {
+        await adminFetch(`/api/businesses/${businessId}/employees/${row.uid}`, {
+          method: "DELETE",
+        });
+      }
+      if (row.driverId) {
+        await adminFetch(`/api/drivers/${row.driverId}`, { method: "DELETE" });
+      }
+      setMessage("تم الحذف.");
+      await load();
     } catch (err) {
       setError((err as Error).message);
     }
@@ -174,10 +401,10 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
   return (
     <div className="card table-card stack">
       <div className="row spread wrap gap">
-        <h3>المستفيدين</h3>
+        <h3>المستفيدين ({filtered.length})</h3>
         <input
           type="search"
-          placeholder="بحث بالاسم أو الجوال أو الإيميل"
+          placeholder="بحث بالاسم أو الجوال"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="input"
@@ -190,10 +417,7 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
             ["all", "الكل"],
             ["passenger", "ركاب"],
             ["driver", "سائقون"],
-            ["both", "راكب وسائق"],
-            ["active", "نشط"],
-            ["inactive", "معطل"],
-            ["pending", "دعوة معلقة"],
+            ["admin", "أدمن"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -217,120 +441,190 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
             <tr>
               <th>الاسم</th>
               <th>الجوال</th>
-              <th>الإيميل</th>
               <th>الدور</th>
-              <th>حالة الحساب</th>
-              <th>الدعوة / الدخول</th>
-              <th>تاريخ الإضافة</th>
-              <th>سجل السائق</th>
+              <th>الحالة</th>
               <th>إجراءات</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((e) => (
-              <tr key={e.uid}>
-                <td>{e.displayName}</td>
-                <td dir="ltr">
-                  {editingUid === e.uid ? (
-                    <span className="row gap">
-                      <input
-                        className="input"
-                        dir="ltr"
-                        placeholder="05XXXXXXXX"
-                        value={phoneDraft}
-                        onChange={(event) => setPhoneDraft(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        onClick={() => void savePhone(e.uid)}
-                      >
-                        حفظ
-                      </button>
-                    </span>
-                  ) : (
-                    e.phone || "—"
-                  )}
-                </td>
-                <td dir="ltr">{e.email || "—"}</td>
-                <td>{ROLE_LABELS[e.roleLabel] ?? e.roleLabel}</td>
-                <td>{e.status}</td>
+            {filtered.map((row) => (
+              <tr key={row.key}>
+                <td>{row.name}</td>
+                <td dir="ltr">{row.phone || "—"}</td>
+                <td>{ROLE_LABELS[row.role]}</td>
                 <td>
-                  {e.phone
-                    ? "دخول برقم الجوال"
-                    : e.hasPassword
-                      ? "كلمة مرور مُفعّلة"
-                      : "بانتظار كلمة المرور"}
-                  {e.membership.status === "pending" ? " · عضوية معلّقة" : ""}
+                  <span
+                    className={`badge ${row.status === "active" ? "badge-success" : "badge-muted"}`}
+                  >
+                    {statusLabel(row.status)}
+                  </span>
                 </td>
-                <td>{e.joinedAt ? new Date(e.joinedAt).toLocaleDateString("ar-SA") : "—"}</td>
-                <td>{e.driverName ?? (e.driverId ? e.driverId : "—")}</td>
-                <td className="actions">
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => {
-                      setEditingUid(e.uid);
-                      setPhoneDraft(e.phone ?? "");
-                      setError("");
-                    }}
-                  >
-                    تعديل الجوال
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() =>
-                      patchEmployee(
-                        e.uid,
-                        { driverAccess: true, passengerAccess: true },
-                        `إضافة دور السائق لـ ${e.displayName}؟`
-                      )
-                    }
-                  >
-                    تحويل لسائق
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() =>
-                      patchEmployee(
-                        e.uid,
-                        { status: e.status === "suspended" ? "active" : "suspended" },
-                        e.status === "suspended"
-                          ? `إعادة تفعيل ${e.displayName}؟`
-                          : `تعطيل ${e.displayName}؟`
-                      )
-                    }
-                  >
-                    {e.status === "suspended" ? "تفعيل" : "تعطيل"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => void resendInvite(e.uid)}
-                  >
-                    إعادة الدعوة
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-danger"
-                    onClick={() => void removeEmployee(e.uid, e.displayName)}
-                  >
-                    إزالة من الشركة
-                  </button>
+                <td>
+                  <div className="action-buttons">
+                    <button
+                      type="button"
+                      className="action-btn action-btn-edit"
+                      onClick={() => openEdit(row)}
+                    >
+                      تعديل
+                    </button>
+                    <button
+                      type="button"
+                      className="action-btn action-btn-warn"
+                      onClick={() => void toggleStatus(row)}
+                    >
+                      {row.status === "active" ? "تعطيل" : "تفعيل"}
+                    </button>
+                    <button
+                      type="button"
+                      className="action-btn action-btn-danger"
+                      onClick={() => void removePerson(row)}
+                    >
+                      حذف
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
             {!filtered.length && (
               <tr>
-                <td colSpan={8} className="muted">
+                <td colSpan={5} className="empty-cell">
                   لا يوجد مستفيدون.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+      )}
+
+      {edit && (
+        <div className="modal-backdrop" onClick={() => setEdit(null)}>
+          <div
+            className="card modal-card edit-person-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>تعديل {edit.name}</h3>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setEdit(null)}
+              >
+                إغلاق
+              </button>
+            </div>
+            {edit.wasBoth && (
+              <p className="muted">
+                هذا الرقم سائق وراكب معاً. اختر دوراً واحداً عند الحفظ.
+              </p>
+            )}
+            <div className="field">
+              <label htmlFor="edit-phone">رقم الجوال</label>
+              <input
+                id="edit-phone"
+                type="tel"
+                inputMode="numeric"
+                dir="ltr"
+                placeholder="05XXXXXXXX"
+                value={edit.phone}
+                onChange={(event) =>
+                  setEdit({ ...edit, phone: event.target.value })
+                }
+              />
+            </div>
+            <div className="field">
+              <label>الدور</label>
+              <div className="role-choices">
+                {(
+                  [
+                    ["passenger", "راكب"],
+                    ["driver", "سائق"],
+                    ["admin", "أدمن"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`role-choice ${edit.role === id ? "active" : ""}`}
+                    onClick={() => setEdit({ ...edit, role: id })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {edit.role === "admin" && (
+              <div className="field">
+                <label htmlFor="edit-email">البريد الإلكتروني</label>
+                <input
+                  id="edit-email"
+                  type="email"
+                  dir="ltr"
+                  placeholder="name@company.com"
+                  value={edit.email}
+                  onChange={(event) =>
+                    setEdit({ ...edit, email: event.target.value })
+                  }
+                />
+              </div>
+            )}
+            {edit.role === "driver" && (
+              <>
+                <div className="field">
+                  <label htmlFor="edit-route">الخط</label>
+                  <select
+                    id="edit-route"
+                    value={edit.routeId}
+                    onChange={(event) =>
+                      setEdit({ ...edit, routeId: event.target.value })
+                    }
+                  >
+                    <option value="">بدون خط</option>
+                    {routes.map((route) => (
+                      <option key={route.routeId} value={route.routeId}>
+                        {route.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="edit-bus">الباص</label>
+                  <select
+                    id="edit-bus"
+                    value={edit.busId}
+                    onChange={(event) =>
+                      setEdit({ ...edit, busId: event.target.value })
+                    }
+                  >
+                    <option value="">بدون باص</option>
+                    {buses.map((bus) => (
+                      <option key={bus.busId} value={bus.busId}>
+                        {bus.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-inline"
+                disabled={saving}
+                onClick={() => void saveEdit()}
+              >
+                {saving ? "جاري الحفظ..." : "حفظ"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-inline"
+                onClick={() => setEdit(null)}
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -93,7 +93,9 @@ class _MapScreenState extends State<MapScreen> {
 
   List<BusModel> get _activeBuses {
     final tripBusIds = _filteredTrips.map((t) => t.busId).toSet();
-    return _buses.where((b) => tripBusIds.contains(b.busId)).toList();
+    return _buses
+        .where((b) => tripBusIds.contains(b.busId) && b.isLive)
+        .toList();
   }
 
   String? _routeNameForBus(BusModel bus) {

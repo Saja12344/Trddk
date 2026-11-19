@@ -1402,13 +1402,24 @@ tbody tr:hover {
 }
 
 .action-btn-view {
-  background: rgba(235, 79, 38, 0.12);
-  border-color: rgba(235, 79, 38, 0.35);
-  color: #ffb899;
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #93c5fd;
 }
 
 .action-btn-view:hover {
-  background: rgba(235, 79, 38, 0.22);
+  background: rgba(96, 165, 250, 0.22);
+  color: #fff;
+}
+
+.action-btn-edit {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #e5e7eb;
+}
+
+.action-btn-edit:hover {
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
@@ -1432,6 +1443,34 @@ tbody tr:hover {
 .action-btn-danger:hover {
   background: rgba(248, 113, 113, 0.2);
   color: #fff;
+}
+
+.role-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.role-choice {
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--grey);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.role-choice.active {
+  border-color: rgba(96, 165, 250, 0.7);
+  background: rgba(96, 165, 250, 0.14);
+  color: #fff;
+}
+
+.edit-person-modal {
+  width: min(440px, 100%);
 }
 
 .form-grid label input {

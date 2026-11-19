@@ -30,9 +30,12 @@ router.post(
         return;
       }
 
-      const beneficiary =
-        body.primaryRole === "employee" || body.membershipRole === "employee";
-      if (beneficiary) {
+      const phoneAccount =
+        body.primaryRole === "employee" ||
+        body.primaryRole === "driver" ||
+        body.membershipRole === "employee" ||
+        body.membershipRole === "driver";
+      if (phoneAccount) {
         if (!body.phone?.trim()) {
           fail(res, "رقم الجوال مطلوب.");
           return;

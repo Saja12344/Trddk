@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import MapView from "@/components/MapView";
 import { geoPointToLatLng, type MapMarker } from "@/lib/mapUtils";
 import { getUserErrorMessage } from "@/lib/errorMessage";
+import { liveTripState } from "@/lib/liveTrip";
 import SelectInput from "@/components/SelectInput";
 
 type PeriodFilter = "7d" | "30d" | "all";
@@ -100,7 +101,9 @@ export default function TripsPage() {
       const driver = driverById.get(driverId);
       if (!driver) continue;
 
-      const activeTrip = activeByDriver.get(driverId) ?? null;
+      const openTrip = activeByDriver.get(driverId) ?? null;
+      const presence = liveTripState(openTrip, openTrip ? busById.get(openTrip.busId) : null);
+      const activeTrip = presence === "idle" ? null : openTrip;
       const periodTrips = [...(tripsByDriver.get(driverId) ?? [])].sort(
         (a, b) =>
           new Date(b.startedAt ?? b.createdAt ?? 0).getTime() -
@@ -110,8 +113,8 @@ export default function TripsPage() {
       if (periodTrips.length === 0 && !activeTrip) continue;
 
       let status: DriverRow["status"] = "inactive";
-      if (activeTrip?.onBreak) status = "on_break";
-      else if (activeTrip) status = "active";
+      if (presence === "break") status = "on_break";
+      else if (presence === "driving") status = "active";
 
       rows.push({
         driver,
@@ -123,12 +126,12 @@ export default function TripsPage() {
 
     rows.sort((a, b) => a.driver.name.localeCompare(b.driver.name, "ar"));
     return rows;
-  }, [drivers, driverById, trips, tripsInMainPeriod]);
+  }, [busById, drivers, driverById, trips, tripsInMainPeriod]);
 
   const liveMarkers: MapMarker[] = useMemo(() => {
     const markers: MapMarker[] = [];
     for (const trip of trips.filter(
-      (trip) => trip.tripStatus === "active" && !trip.onBreak
+      (trip) => liveTripState(trip, busById.get(trip.busId)) === "driving"
     )) {
       const bus = busById.get(trip.busId);
       if (!bus?.currentLocation) continue;

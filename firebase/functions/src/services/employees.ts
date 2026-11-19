@@ -1,7 +1,8 @@
-import type { AccountStatus, BusinessMembership, MembershipRole } from "@tardadi/shared";
+import type { AccountStatus, BusinessMembership, MembershipRole, PrimaryRole } from "@tardadi/shared";
 import { COLLECTIONS, requireSaudiMobile } from "@tardadi/shared";
+import { loadAuthenticatedUser, syncCustomClaims } from "../auth/firebaseAuth";
 import { admin, db } from "../firebase";
-import { upsertMembership, storeBeneficiaryPhone } from "./users";
+import { normalizeEmail, storeBeneficiaryPhone, upsertMembership } from "./users";
 
 export interface BusinessEmployeeRecord {
   uid: string;
@@ -49,13 +50,8 @@ export async function listBusinessEmployees(
     } as BusinessMembership;
 
     if (membership.status === "revoked") continue;
-    // Panel roles belong in company manager — not the beneficiaries employee list.
-    if (
-      membership.role === "business_admin" ||
-      membership.role === "business_viewer"
-    ) {
-      continue;
-    }
+    // View-only panel accounts stay on the company page.
+    if (membership.role === "business_viewer") continue;
 
     const userDoc = await db.collection(COLLECTIONS.users).doc(uid).get();
     if (!userDoc.exists) continue;
@@ -110,18 +106,82 @@ export async function listBusinessEmployees(
   );
 }
 
+async function ensureDriverRecord(
+  businessId: string,
+  driverId: string | null,
+  name: string,
+  phone: string
+): Promise<string> {
+  const drivers = db
+    .collection(COLLECTIONS.businesses)
+    .doc(businessId)
+    .collection(COLLECTIONS.drivers);
+  const now = nowIso();
+  const payload = {
+    name: name || phone,
+    phone,
+    status: "active",
+    updatedAt: now,
+  };
+
+  if (driverId) {
+    const existing = await drivers.doc(driverId).get();
+    if (existing.exists) {
+      await existing.ref.set(payload, { merge: true });
+      return driverId;
+    }
+  }
+
+  const byPhone = await drivers.where("phone", "==", phone).limit(1).get();
+  if (!byPhone.empty) {
+    await byPhone.docs[0].ref.set(payload, { merge: true });
+    return byPhone.docs[0].id;
+  }
+
+  const created = await drivers.add({
+    ...payload,
+    driverCode: null,
+    assignedRouteId: null,
+    assignedBusId: null,
+    createdAt: now,
+  });
+  return created.id;
+}
+
+async function deactivateDriverRecord(
+  businessId: string,
+  driverId: string
+): Promise<void> {
+  await db
+    .collection(COLLECTIONS.businesses)
+    .doc(businessId)
+    .collection(COLLECTIONS.drivers)
+    .doc(driverId)
+    .set(
+      {
+        status: "inactive",
+        assignedRouteId: null,
+        assignedBusId: null,
+        updatedAt: nowIso(),
+      },
+      { merge: true }
+    );
+}
+
 export async function updateEmployeeMembership(
   businessId: string,
   uid: string,
   patch: {
     displayName?: string;
     phone?: string;
+    email?: string;
+    appRole?: "passenger" | "driver" | "admin";
     passengerAccess?: boolean;
     driverAccess?: boolean;
     status?: AccountStatus;
     membershipStatus?: AccountStatus;
   }
-): Promise<void> {
+): Promise<{ driverId: string | null }> {
   if (patch.displayName) {
     await db.collection(COLLECTIONS.users).doc(uid).set(
       { displayName: patch.displayName, updatedAt: nowIso() },
@@ -139,12 +199,14 @@ export async function updateEmployeeMembership(
       { status: patch.status, updatedAt: nowIso() },
       { merge: true }
     );
-    if (patch.status === "suspended" || patch.status === "revoked") {
-      try {
+    try {
+      if (patch.status === "suspended" || patch.status === "revoked") {
         await admin.auth().updateUser(uid, { disabled: true });
-      } catch {
-        /* ignore */
+      } else if (patch.status === "active") {
+        await admin.auth().updateUser(uid, { disabled: false });
       }
+    } catch {
+      /* ignore */
     }
   }
 
@@ -158,25 +220,119 @@ export async function updateEmployeeMembership(
     throw new Error("Employee not found in this company.");
   }
 
+  if (patch.email?.trim()) {
+    const email = normalizeEmail(patch.email);
+    await db.collection(COLLECTIONS.users).doc(uid).set(
+      { email, updatedAt: nowIso() },
+      { merge: true }
+    );
+    try {
+      await admin.auth().updateUser(uid, { email });
+    } catch {
+      /* phone-only accounts may not accept an email update */
+    }
+  }
+
   if (patch.phone?.trim()) {
     await storeBeneficiaryPhone(uid, patch.phone, businessId);
   }
 
   const current = membershipDoc.data() as Omit<BusinessMembership, "businessId">;
-  const passengerAccess = patch.passengerAccess ?? current.passengerAccess;
-  const driverAccess = patch.driverAccess ?? current.driverAccess;
+  const userData = (await db.collection(COLLECTIONS.users).doc(uid).get()).data();
+  let passengerAccess = patch.passengerAccess ?? current.passengerAccess;
+  let driverAccess = patch.driverAccess ?? current.driverAccess;
   let role: MembershipRole = current.role;
-  if (driverAccess && passengerAccess === false) role = "driver";
-  else if (passengerAccess !== false) role = "employee";
+  let driverId = current.driverId ?? null;
+  const phone = patch.phone?.trim()
+    ? requireSaudiMobile(patch.phone)
+    : ((userData?.phone as string | undefined) ??
+      (current.phone as string | undefined) ??
+      "");
+  const name =
+    patch.displayName?.trim() ||
+    (userData?.displayName as string | undefined) ||
+    phone;
+
+  if (patch.appRole === "passenger") {
+    role = "employee";
+    passengerAccess = true;
+    driverAccess = false;
+  } else if (patch.appRole === "driver") {
+    if (!phone) throw new Error("رقم الجوال مطلوب للسائق.");
+    role = "driver";
+    passengerAccess = false;
+    driverAccess = true;
+  } else if (patch.appRole === "admin") {
+    role = "business_admin";
+    passengerAccess = false;
+    driverAccess = false;
+  } else if (driverAccess && passengerAccess === false) {
+    role = "driver";
+  } else if (passengerAccess !== false && role !== "business_admin") {
+    role = "employee";
+  }
+
+  if (patch.appRole === "driver") {
+    driverId = await ensureDriverRecord(businessId, driverId, name, phone);
+  } else if (patch.phone?.trim() && driverId && role === "driver") {
+    driverId = await ensureDriverRecord(businessId, driverId, name, phone);
+  } else if (
+    (patch.appRole === "passenger" || patch.appRole === "admin") &&
+    driverId
+  ) {
+    await deactivateDriverRecord(businessId, driverId);
+  }
+
+  if (driverId && patch.status === "suspended") {
+    await db
+      .collection(COLLECTIONS.businesses)
+      .doc(businessId)
+      .collection(COLLECTIONS.drivers)
+      .doc(driverId)
+      .set({ status: "inactive", updatedAt: nowIso() }, { merge: true });
+  } else if (driverId && patch.status === "active" && role === "driver") {
+    await db
+      .collection(COLLECTIONS.businesses)
+      .doc(businessId)
+      .collection(COLLECTIONS.drivers)
+      .doc(driverId)
+      .set({ status: "active", updatedAt: nowIso() }, { merge: true });
+  }
+
+  const currentPrimary = userData?.primaryRole as PrimaryRole | undefined;
+  const protectedPrimary =
+    currentPrimary === "super_admin" || currentPrimary === "platform_admin";
+  if (!protectedPrimary) {
+    const nextPrimary: PrimaryRole =
+      role === "business_admin"
+        ? "business_admin"
+        : role === "driver"
+          ? "driver"
+          : "employee";
+    if (currentPrimary !== nextPrimary) {
+      await db.collection(COLLECTIONS.users).doc(uid).set(
+        { primaryRole: nextPrimary, updatedAt: nowIso() },
+        { merge: true }
+      );
+    }
+  }
 
   await upsertMembership(uid, businessId, {
     ...current,
     role,
     passengerAccess,
     driverAccess,
-    ...(patch.phone?.trim() ? { phone: requireSaudiMobile(patch.phone) } : {}),
+    driverId,
+    ...(phone ? { phone } : {}),
     status: patch.membershipStatus ?? current.status,
   });
+
+  const loaded = await loadAuthenticatedUser(uid);
+  if (loaded) {
+    await syncCustomClaims(loaded);
+  }
+
+  return { driverId };
 }
 
 export async function removeEmployeeFromBusiness(

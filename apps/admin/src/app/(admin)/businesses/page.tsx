@@ -301,7 +301,7 @@ export default function BusinessesPage() {
                     </Link>
                     <button
                       type="button"
-                      className="action-btn action-btn-view"
+                      className="action-btn action-btn-edit"
                       title="تعديل بيانات الشركة"
                       onClick={() => {
                         setEditingId(b.businessId);

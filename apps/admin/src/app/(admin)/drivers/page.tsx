@@ -1,13 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Bus, Driver, Route, Trip } from "@tardadi/shared";
 import { api } from "@/lib/api";
-import { adminFetch } from "@/lib/adminFetch";
 import { getUserErrorMessage } from "@/lib/errorMessage";
-import SelectInput from "@/components/SelectInput";
 import BusinessBadge from "@/components/BusinessBadge";
 import { useBusinessMap, useShowBusinessColumn } from "@/hooks/useBusinessMap";
+import { liveTripState } from "@/lib/liveTrip";
 
 function formatDateTime(value?: string | null) {
   if (!value) return "—";
@@ -38,12 +38,7 @@ export default function DriversPage() {
   const [buses, setBuses] = useState<Bus[]>([]);
   const [activeTrips, setActiveTrips] = useState<Trip[]>([]);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [assignedRouteId, setAssignedRouteId] = useState("");
-  const [assignedBusId, setAssignedBusId] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   async function load() {
     setError("");
@@ -72,31 +67,6 @@ export default function DriversPage() {
     }
   }
 
-  async function createDriver(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    try {
-      await adminFetch("/api/drivers", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          phone,
-          assignedRouteId,
-          assignedBusId,
-        }),
-      });
-      setName("");
-      setPhone("");
-      setAssignedRouteId("");
-      setAssignedBusId("");
-      setSuccess("تمت إضافة السائق. يقدر يسجّل دخوله برقم جواله في التطبيق.");
-      await load();
-    } catch (e) {
-      setError(getUserErrorMessage(e));
-    }
-  }
-
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 30000);
@@ -106,90 +76,25 @@ export default function DriversPage() {
   const selectedTrip = selectedDriver
     ? activeTrips.find((trip) => trip.driverId === selectedDriver.driverId)
     : null;
+  const selectedBus = selectedTrip
+    ? buses.find((bus) => bus.busId === selectedTrip.busId)
+    : null;
+  const selectedPresence = liveTripState(selectedTrip, selectedBus);
 
   return (
     <>
       <div className="page-header">
         <h1>السائقين</h1>
-        <p>أضف اسم السائق ورقم جواله. اضغط على السائق لعرض تفاصيل الاستراحة والرحلة.</p>
+        <p>
+          إضافة السائق وتعديل رقمه أو حذفه تتم من{" "}
+          <Link href="/beneficiaries">صفحة المستفيدين</Link>. هذه الصفحة لمتابعة
+          الرحلة والاستراحة.
+        </p>
       </div>
 
-      <div className="grid-2">
-        <form className="card" onSubmit={createDriver}>
-          <h3>إضافة سائق</h3>
-          {error && <div className="alert alert-error">{error}</div>}
-          {success && <div className="alert alert-success">{success}</div>}
+      {error && <div className="alert alert-error">{error}</div>}
 
-          <div className="field">
-            <label>اسم السائق</label>
-            <input
-              placeholder="مثال: أحمد علي"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="field">
-            <label>رقم الجوال</label>
-            <input
-              placeholder="05xxxxxxxx"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="field">
-            <label>الخط المسموح</label>
-            <SelectInput
-              value={assignedRouteId}
-              onChange={(e) => setAssignedRouteId(e.target.value)}
-              required
-            >
-              <option value="">اختر الخط</option>
-              {routes.map((route) => (
-                <option key={route.routeId} value={route.routeId}>
-                  {showBusiness && businessMap[route.businessId]
-                    ? `${businessMap[route.businessId]} · `
-                    : ""}
-                  {route.name}
-                </option>
-              ))}
-            </SelectInput>
-          </div>
-
-          <div className="field">
-            <label>الباص المعيّن</label>
-            <SelectInput
-              value={assignedBusId}
-              onChange={(e) => setAssignedBusId(e.target.value)}
-              required
-            >
-              <option value="">اختر الباص</option>
-              {buses.map((bus) => (
-                <option key={bus.busId} value={bus.busId}>
-                  {showBusiness && businessMap[bus.businessId]
-                    ? `${businessMap[bus.businessId]} · `
-                    : ""}
-                  {bus.label}
-                </option>
-              ))}
-            </SelectInput>
-          </div>
-
-          {buses.length === 0 && (
-            <div className="alert alert-error">
-              لا توجد باصات. أضف باصاً أولاً من صفحة الباصات.
-            </div>
-          )}
-
-          <button className="btn" type="submit">
-            حفظ السائق
-          </button>
-        </form>
-
-        <div className="card table-wrap">
+      <div className="card table-wrap">
           <h3>السائقين ({drivers.length})</h3>
           <table>
             <thead>
@@ -215,7 +120,8 @@ export default function DriversPage() {
                 const trip = activeTrips.find(
                   (item) => item.driverId === driver.driverId
                 );
-                const onBreak = trip?.onBreak === true;
+                const bus = buses.find((item) => item.busId === trip?.busId);
+                const presence = liveTripState(trip, bus);
 
                 return (
                   <tr
@@ -235,12 +141,12 @@ export default function DriversPage() {
                     </td>
                     <td>{busLabel}</td>
                     <td>
-                      {!trip ? (
-                        <span className="chip">غير نشط</span>
-                      ) : onBreak ? (
+                      {presence === "break" ? (
                         <span className="chip chip-warn">في استراحة</span>
-                      ) : (
+                      ) : presence === "driving" ? (
                         <span className="chip chip-success">في رحلة</span>
+                      ) : (
+                        <span className="chip">غير نشط</span>
                       )}
                     </td>
                   </tr>
@@ -248,7 +154,6 @@ export default function DriversPage() {
               })}
             </tbody>
           </table>
-        </div>
       </div>
 
       {selectedDriver && (
@@ -270,7 +175,7 @@ export default function DriversPage() {
 
             <p dir="ltr">{selectedDriver.phone}</p>
 
-            {!selectedTrip ? (
+            {selectedPresence === "idle" || !selectedTrip ? (
               <div className="alert">لا توجد رحلة نشطة لهذا السائق.</div>
             ) : (
               <>
@@ -278,7 +183,7 @@ export default function DriversPage() {
                   <div>
                     <strong>حالة الرحلة</strong>
                     <p>
-                      {selectedTrip.onBreak ? "في استراحة" : "نشطة"}
+                      {selectedPresence === "break" ? "في استراحة" : "في رحلة"}
                     </p>
                   </div>
                   <div>

@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { isSuperAdmin } from "@/lib/auth.constants";
 import { adminFetch } from "@/lib/adminFetch";
+import { liveTripState } from "@/lib/liveTrip";
 import type { BusinessListItem } from "@tardadi/shared";
 
 export default function DashboardPage() {
@@ -42,11 +43,14 @@ export default function DashboardPage() {
           api.getDrivers() as Promise<Driver[]>,
           api.getTrips("active") as Promise<Trip[]>,
         ]);
+        const busById = new Map(buses.map((bus) => [bus.busId, bus]));
         setCounts({
           routes: routes.length,
           buses: buses.length,
           drivers: drivers.length,
-          trips: trips.length,
+          trips: trips.filter(
+            (trip) => liveTripState(trip, busById.get(trip.busId)) !== "idle"
+          ).length,
           businesses: 0,
         });
       } catch {

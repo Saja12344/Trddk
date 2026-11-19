@@ -347,8 +347,15 @@ export async function createOrLinkUser(
       existingMembershipRole !== undefined &&
       (existingMembershipRole === "business_admin" ||
         existingMembershipRole === "business_viewer");
-    const grantPassengerAccess = !isPanelRole;
     const inviteAsActivePanel = isPanelRole;
+    const passengerAccess =
+      options.passengerAccess !== undefined
+        ? options.passengerAccess
+        : !isPanelRole;
+    const driverAccess =
+      options.driverAccess !== undefined
+        ? options.driverAccess
+        : options.membershipRole === "driver";
 
     await upsertMembership(uid, options.businessId, {
       role: preserveMembershipRole
@@ -366,16 +373,8 @@ export async function createOrLinkUser(
       department: options.department ?? null,
       driverId: options.driverId ?? null,
       ...(phone ? { phone } : {}),
-      ...(grantPassengerAccess
-        ? { passengerAccess: true }
-        : options.passengerAccess !== undefined
-          ? { passengerAccess: options.passengerAccess }
-          : { passengerAccess: false }),
-      ...(options.driverAccess !== undefined
-        ? { driverAccess: options.driverAccess }
-        : isPanelRole
-          ? { driverAccess: false }
-          : {}),
+      passengerAccess,
+      driverAccess,
     });
   }
 
@@ -509,12 +508,15 @@ export async function inviteUser(
 ): Promise<{ uid: string; created: boolean }> {
   const email = request.email?.trim() ? normalizeEmail(request.email) : "";
   const phone = request.phone?.trim() ? requireSaudiMobile(request.phone) : "";
-  const beneficiary =
-    request.primaryRole === "employee" || request.membershipRole === "employee";
-  if (beneficiary && !phone) {
+  const phoneAccount =
+    request.primaryRole === "employee" ||
+    request.primaryRole === "driver" ||
+    request.membershipRole === "employee" ||
+    request.membershipRole === "driver";
+  if (phoneAccount && !phone) {
     throw new Error("رقم الجوال مطلوب.");
   }
-  if (!beneficiary && !email) {
+  if (!phoneAccount && !email) {
     throw new Error("البريد الإلكتروني مطلوب.");
   }
 
@@ -529,6 +531,8 @@ export async function inviteUser(
     employeeNumber: request.employeeNumber ?? null,
     department: request.department ?? null,
     source: "invite",
+    passengerAccess: request.membershipRole === "driver" ? false : undefined,
+    driverAccess: request.membershipRole === "driver" ? true : undefined,
   });
 
   if (

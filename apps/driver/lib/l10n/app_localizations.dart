@@ -115,6 +115,14 @@ class AppLocalizations {
           'Are you sure you want to end this trip? This action will stop live tracking.',
       'cancel': 'Cancel',
       'endTrip': 'End Trip',
+      'openTripTitle': 'A trip is already open',
+      'openTripMessage':
+          'This trip is still open from before. Continue it, or end it and start a new one?',
+      'continueOpenTrip': 'Continue trip',
+      'startFreshTrip': 'Start a new trip',
+      'tripAutoClosed':
+          'The trip ended automatically because the location stopped.',
+      'startNewTrip': 'Start a new trip',
       'breakStarted': 'Break started',
       'tripResumed': 'Trip resumed',
       'returnRouteStarted': 'Return route started',
@@ -226,6 +234,13 @@ class AppLocalizations {
           'هل أنت متأكّد من إنهاء هذه الرحلة؟ سيتوقّف التتبّع المباشر.',
       'cancel': 'إلغاء',
       'endTrip': 'إنهاء الرحلة',
+      'openTripTitle': 'فيه رحلة مفتوحة',
+      'openTripMessage':
+          'الرحلة السابقة لسا مفتوحة. تبي تكملها، أو تقفلها وتبدأ رحلة جديدة؟',
+      'continueOpenTrip': 'أكمل الرحلة',
+      'startFreshTrip': 'رحلة جديدة',
+      'tripAutoClosed': 'انتهت الرحلة تلقائياً بسبب انقطاع الموقع',
+      'startNewTrip': 'بدء رحلة جديدة',
       'breakStarted': 'بدأت الاستراحة',
       'tripResumed': 'استُؤنفت الرحلة',
       'returnRouteStarted': 'بدأ مسار العودة',
@@ -354,6 +369,12 @@ class AppLocalizations {
   String get endTripMessage => _t('endTripMessage');
   String get cancel => _t('cancel');
   String get endTrip => _t('endTrip');
+  String get openTripTitle => _t('openTripTitle');
+  String get openTripMessage => _t('openTripMessage');
+  String get continueOpenTrip => _t('continueOpenTrip');
+  String get startFreshTrip => _t('startFreshTrip');
+  String get tripAutoClosed => _t('tripAutoClosed');
+  String get startNewTrip => _t('startNewTrip');
   String get breakStarted => _t('breakStarted');
   String get tripResumed => _t('tripResumed');
   String get returnRouteStarted => _t('returnRouteStarted');

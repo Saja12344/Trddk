@@ -29,7 +29,7 @@ router.use((req, res, next) => {
   rejectStoreReviewAccess(req, res, next);
 });
 
-const LIVE_GPS_WINDOW_MS = 60_000;
+const LIVE_GPS_WINDOW_MS = 3 * 60 * 1000;
 
 function isRecentlyUpdated(lastSeenAt: string | null | undefined): boolean {
   if (!lastSeenAt) return false;

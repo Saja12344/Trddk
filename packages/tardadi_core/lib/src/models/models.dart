@@ -188,7 +188,7 @@ class BusModel {
     if (lastSeenAt == null) return false;
     final seen = DateTime.tryParse(lastSeenAt!);
     if (seen == null) return false;
-    return DateTime.now().difference(seen).inSeconds <= 60;
+    return DateTime.now().difference(seen) <= const Duration(minutes: 3);
   }
 }
 

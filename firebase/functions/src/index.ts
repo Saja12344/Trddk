@@ -1,4 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import express from "express";
 import cors from "cors";
@@ -14,6 +15,7 @@ import remindersRouter from "./routes/reminders";
 import usersRouter from "./routes/users";
 import { navigationRouter } from "./routes/routing";
 import { attachAdminAuth } from "./auth/middleware";
+import { closeStaleTrips } from "./jobs/closeStaleTrips";
 import { isAllowedApiOrigin } from "./http/corsPolicy";
 
 const adminJwtSecret = defineSecret("ADMIN_JWT_SECRET");
@@ -50,6 +52,18 @@ app.use("/api/gps", gpsRouter);
 app.use("/api/reminders", remindersRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/routing", navigationRouter);
+
+export const closeInactiveTrips = onSchedule(
+  {
+    schedule: "every 5 minutes",
+    region: "us-central1",
+    timeoutSeconds: 120,
+    memory: "256MiB",
+  },
+  async () => {
+    await closeStaleTrips();
+  }
+);
 
 export const api = onRequest(
   {

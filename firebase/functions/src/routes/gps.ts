@@ -44,7 +44,13 @@ router.post("/", requireTripWriter, async (req, res) => {
 
     const trip = tripDoc.data()!;
     if (trip.tripStatus !== "active") {
-      fail(res, "Trip is not active", 400);
+      fail(
+        res,
+        trip.endReason === "auto_closed_inactive"
+          ? "TRIP_AUTO_CLOSED"
+          : "Trip is not active",
+        400
+      );
       return;
     }
 

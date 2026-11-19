@@ -42,6 +42,7 @@ class _MapScreenState extends State<MapScreen>
   var _distanceRefreshInFlight = false;
   LocationPermission? _locationPermission;
   bool _tripActive = false;
+  var _autoCloseDialogOpen = false;
   bool _tripPanelOpen = false;
   bool _etaSheetExpanded = false;
   bool _onBreak = false;
@@ -312,14 +313,30 @@ class _MapScreenState extends State<MapScreen>
 
     try {
       final existingTripId = SessionStore.instance.session?.tripId;
-      final tripId = existingTripId != null && existingTripId.isNotEmpty
-          ? existingTripId
+      var resumeExisting = false;
+      if (existingTripId != null && existingTripId.isNotEmpty) {
+        if (!mounted) return;
+        final choice = await _askAboutOpenTrip();
+        if (!mounted || choice == null) return;
+        resumeExisting = choice == _OpenTripChoice.resume;
+        if (!resumeExisting) {
+          try {
+            await _api.endTrip(
+              tripId: existingTripId,
+              driverId: _session.driver.driverId,
+            );
+          } catch (_) {}
+          SessionStore.instance.updateTripId(null);
+        }
+      }
+      final tripId = resumeExisting
+          ? existingTripId!
           : await _api.startTrip(
               driverId: _session.driver.driverId,
               busId: _session.bus.busId,
               routeId: _session.route.routeId,
             );
-      if (existingTripId == null || existingTripId.isEmpty) {
+      if (!resumeExisting) {
         SessionStore.instance.updateTripId(tripId);
       }
       await _refreshDistance();
@@ -418,11 +435,82 @@ class _MapScreenState extends State<MapScreen>
           });
           _onNavigationTick(position);
         }
-      } catch (_) {}
-      finally {
+      } catch (error) {
+        final message = error.toString();
+        if (message.contains('TRIP_AUTO_CLOSED')) {
+          unawaited(_handleAutoClosedTrip());
+        } else if (message.contains('Trip is not active')) {
+          _gpsTimer?.cancel();
+          SessionStore.instance.updateTripId(null);
+          unawaited(_setTripAwake(false));
+          if (mounted) {
+            setState(() {
+              _tripActive = false;
+              _onBreak = false;
+            });
+          }
+        }
+      } finally {
         gpsInFlight = false;
       }
     });
+  }
+
+  Future<_OpenTripChoice?> _askAboutOpenTrip() {
+    final l10n = context.l10n;
+    return showDialog<_OpenTripChoice>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.openTripTitle),
+        content: Text(l10n.openTripMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_OpenTripChoice.resume),
+            child: Text(l10n.continueOpenTrip),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_OpenTripChoice.restart),
+            child: Text(l10n.startFreshTrip),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleAutoClosedTrip() async {
+    if (_autoCloseDialogOpen) return;
+    _autoCloseDialogOpen = true;
+    _gpsTimer?.cancel();
+    SessionStore.instance.updateTripId(null);
+    unawaited(_setTripAwake(false));
+    unawaited(_voice.stop());
+    if (!mounted) return;
+    setState(() {
+      _tripActive = false;
+      _onBreak = false;
+      _tripPanelOpen = false;
+    });
+    final l10n = context.l10n;
+    final startNew = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text(l10n.tripAutoClosed),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.startNewTrip),
+          ),
+        ],
+      ),
+    );
+    _autoCloseDialogOpen = false;
+    if (startNew == true && mounted) {
+      await _startTrip();
+    }
   }
 
   void _showError(String message) {
@@ -1016,6 +1104,8 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 }
+
+enum _OpenTripChoice { resume, restart }
 
 String _formatDistance(BuildContext context, double kilometers) {
   return context.l10n.formatDistanceKm(kilometers);
