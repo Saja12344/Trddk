@@ -23,7 +23,11 @@ String _displayDriverName(BuildContext context, DriverSession session) {
   if (name.isEmpty) {
     return context.displayPersonName('Ahmed Al-Rashid');
   }
-  return context.displayPersonName(name, nameAr: session.driver.nameAr);
+  return context.displayPersonName(
+    name,
+    nameAr: session.driver.nameAr,
+    nameEn: session.driver.nameEn,
+  );
 }
 
 String _driverInitials(String name) {
@@ -41,10 +45,15 @@ String _driverInitials(String name) {
 }
 
 String _routeSummary(BuildContext context, DriverSession session) {
-  final bus = session.bus.label.trim();
+  final bus = context.displayPlaceName(
+    session.bus.label.trim(),
+    nameAr: session.bus.labelAr,
+    nameEn: session.bus.labelEn,
+  );
   final route = context.displayPlaceName(
     session.route.name.trim(),
     nameAr: session.route.nameAr,
+    nameEn: session.route.nameEn,
   );
   final pieces = [if (bus.isNotEmpty) bus, if (route.isNotEmpty) route];
   return pieces.isEmpty ? 'Track · Yellow' : pieces.join(' · ');
@@ -104,10 +113,20 @@ class _VehicleOnboardingScreenState extends State<VehicleOnboardingScreen> {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 24,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 8),
+            Text(
+              l10n.chooseVehicleHint,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: DriverColors.muted,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 32),
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
@@ -130,7 +149,7 @@ class _VehicleOnboardingScreenState extends State<VehicleOnboardingScreen> {
             DriverButton(
               label: l10n.next,
               onPressed: canContinue ? _continue : null,
-              color: canContinue ? DriverColors.orange : DriverColors.card,
+              color: DriverColors.orange,
               height: 56,
               fontSize: 24,
             ),
@@ -157,35 +176,86 @@ class _VehicleGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? DriverColors.orange : DriverColors.card,
-      borderRadius: BorderRadius.circular(16),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 18),
-          child: Column(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: selected
+            ? Color.alphaBlend(
+                DriverColors.orange.withValues(alpha: 0.12),
+                const Color(0xFF1A1D5C),
+              )
+            : const Color(0xFF1A1D5C),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: selected
+              ? DriverColors.orange
+              : Colors.white.withValues(alpha: 0.06),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
             children: [
-              Expanded(
-                child: Center(
-                  // Use the key, not the translated label, or the Arabic UI
-                  // finds no image.
-                  child: _VehicleAssetIcon(vehicle: vehicle),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        // Use the key, not the translated label, or the
+                        // Arabic UI finds no image.
+                        child: _VehicleAssetIcon(
+                          vehicle: vehicle,
+                          iconBoxWidth: 96,
+                          iconBoxHeight: 50,
+                          color: selected
+                              ? DriverColors.orange
+                              : Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: selected
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.8),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
+              if (selected)
+                PositionedDirectional(
+                  top: 10,
+                  end: 10,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: const BoxDecoration(
+                      color: DriverColors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      size: 15,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -199,11 +269,15 @@ class _VehicleAssetIcon extends StatelessWidget {
     required this.vehicle,
     this.iconBoxHeight = 54,
     this.iconBoxWidth = 84,
+    this.color = DriverColors.orange,
   });
 
   final String vehicle;
   final double iconBoxHeight;
   final double iconBoxWidth;
+
+  /// Vehicle artwork is white line-art; tinted here (orange by default).
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -220,6 +294,8 @@ class _VehicleAssetIcon extends StatelessWidget {
           gaplessPlayback: true,
           width: iconBoxWidth,
           height: iconBoxHeight,
+          color: color,
+          colorBlendMode: BlendMode.srcIn,
         ),
       ),
     );
@@ -246,17 +322,29 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late String _vehicle = widget.selectedVehicle;
-  bool _notifications = false;
-  late bool _savedEnglish = !LocaleNotifier.instance.isArabic;
-  late bool _pendingEnglish = _savedEnglish;
+  bool _notifications = true;
+  late bool _english = !LocaleNotifier.instance.isArabic;
 
-  bool get _languageDirty => _pendingEnglish != _savedEnglish;
+  @override
+  void initState() {
+    super.initState();
+    DriverPrefs.instance.notificationsEnabled().then((value) {
+      if (mounted) setState(() => _notifications = value);
+    });
+  }
 
-  Future<void> _saveLanguage() async {
-    final locale = _pendingEnglish ? const Locale('en') : const Locale('ar');
-    await LocaleNotifier.instance.setLocale(locale);
+  Future<void> _setNotifications(bool value) async {
+    setState(() => _notifications = value);
+    await DriverPrefs.instance.setNotificationsEnabled(value);
+  }
+
+  /// Language applies immediately — no separate save button.
+  Future<void> _setLanguage(bool english) async {
+    if (english == _english) return;
+    setState(() => _english = english);
+    await LocaleNotifier.instance
+        .setLocale(english ? const Locale('en') : const Locale('ar'));
     if (!mounted) return;
-    setState(() => _savedEnglish = _pendingEnglish);
     DriverSnack.show(context, context.l10n.languageSaved);
   }
 
@@ -295,46 +383,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       name: displayName,
                       subtitle: routeSummary,
                     ),
-                    const SizedBox(height: 26),
-                    _SectionLabel(l10n.preferences),
-                    const SizedBox(height: 10),
-                    _SettingsCard(
-                      child: Column(
-                        children: [
-                          _SettingRow(
-                            icon: Icons.language_rounded,
-                            label: l10n.language,
-                            trailing: _SegmentToggle(
-                              left: 'Eng',
-                              right: 'Ar',
-                              leftSelected: _pendingEnglish,
-                              onChanged: (value) =>
-                                  setState(() => _pendingEnglish = value),
-                            ),
-                          ),
-                          const _CardDivider(),
-                          _SettingRow(
-                            icon: Icons.notifications_none_rounded,
-                            label: l10n.notifications,
-                            trailing: _SwitchPill(
-                              value: _notifications,
-                              onChanged: (value) =>
-                                  setState(() => _notifications = value),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_languageDirty) ...[
-                      const SizedBox(height: 12),
-                      DriverButton(
-                        label: l10n.save,
-                        onPressed: _saveLanguage,
-                        height: 48,
-                        fontSize: 17,
-                      ),
-                    ],
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 28),
                     _SectionLabel(l10n.vehicle),
                     const SizedBox(height: 10),
                     _SettingsCard(
@@ -344,86 +393,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onTap: _changeVehicle,
                           borderRadius: BorderRadius.circular(16),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
+                            padding: const EdgeInsets.all(12),
                             child: Row(
                               children: [
-                                _VehicleAssetIcon(
-                                  vehicle: _vehicle,
-                                  iconBoxWidth: 22,
-                                  iconBoxHeight: 15,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    l10n.changeVehicle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                Container(
+                                  width: 84,
+                                  height: 58,
+                                  decoration: BoxDecoration(
+                                    color: DriverColors.navy,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: _VehicleAssetIcon(
+                                    vehicle: _vehicle,
+                                    iconBoxWidth: 62,
+                                    iconBoxHeight: 34,
                                   ),
                                 ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      l10n.vehicleLabel(_vehicle),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.45),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        l10n.vehicleLabel(_vehicle),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
-                                      textAlign: TextAlign.end,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    DriverChevronForward(
-                                      color: const Color(0x73FFFFFF),
-                                      size: 18,
-                                    ),
-                                  ],
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        l10n.currentAssignedVehicle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: DriverColors.muted,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  l10n.change,
+                                  style: const TextStyle(
+                                    color: DriverColors.orange,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
                               ],
                             ),
                           ),
                         ),
                       ),
                     ),
+                    const SizedBox(height: 22),
+                    _SectionLabel(l10n.preferences),
+                    const SizedBox(height: 10),
+                    _SettingsCard(
+                      child: Column(
+                        children: [
+                          _SettingRow(
+                            icon: Icons.language_rounded,
+                            label: l10n.language,
+                            trailing: _SegmentToggle(
+                              left: 'English',
+                              right: 'العربية',
+                              leftSelected: _english,
+                              onChanged: _setLanguage,
+                            ),
+                          ),
+                          const _CardDivider(),
+                          _SettingRow(
+                            icon: Icons.notifications_none_rounded,
+                            label: l10n.notifications,
+                            trailing: _SwitchPill(
+                              value: _notifications,
+                              onChanged: _setNotifications,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const Spacer(),
                     const SizedBox(height: 24),
-                    SizedBox(
-                      height: 50,
-                      child: OutlinedButton(
-                        onPressed: widget.onLogout,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white.withValues(alpha: 0.9),
-                          backgroundColor: Colors.white.withValues(alpha: 0.05),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.18),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.logout_rounded, size: 18),
-                            const SizedBox(width: 8),
-                            Text(l10n.logOut),
-                          ],
+                    Divider(
+                      height: 1,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                    TextButton.icon(
+                      onPressed: widget.onLogout,
+                      style: TextButton.styleFrom(
+                        foregroundColor: DriverColors.orange,
+                        minimumSize: const Size.fromHeight(52),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
+                      icon: const Icon(Icons.logout_rounded, size: 18),
+                      label: Text(l10n.logOut),
                     ),
                   ],
                 ),
@@ -552,6 +630,7 @@ class _ChangeVehicleScreenState extends State<ChangeVehicleScreen> {
                         children: [
                           for (int index = 0; index < kVehicleOptions.length; index++) ...[
                             _VehicleOption(
+                              vehicle: kVehicleOptions[index],
                               label: l10n.vehicleLabel(kVehicleOptions[index]),
                               selected: _selected == kVehicleOptions[index],
                               onTap: () =>
@@ -591,12 +670,11 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      label.toUpperCase(),
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.4),
-        fontSize: 11,
+      label,
+      style: const TextStyle(
+        color: DriverColors.muted,
+        fontSize: 13,
         fontWeight: FontWeight.w600,
-        letterSpacing: 0.8,
       ),
     );
   }
@@ -626,7 +704,7 @@ class _DriverProfileHeader extends StatelessWidget {
           child: Text(
             _driverInitials(name),
             style: const TextStyle(
-              color: Color(0xFF4A1B0C),
+              color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -687,9 +765,9 @@ class _SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: const Color(0xFF1F2263),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: child,
     );
@@ -740,11 +818,14 @@ class _HeaderIconButton extends StatelessWidget {
 
 class _VehicleOption extends StatelessWidget {
   const _VehicleOption({
+    required this.vehicle,
     required this.label,
     required this.selected,
     required this.onTap,
   });
 
+  /// Vehicle key ('Bus', 'Van'...) — the label is translated.
+  final String vehicle;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -752,7 +833,9 @@ class _VehicleOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: selected
+          ? DriverColors.orange.withValues(alpha: 0.10)
+          : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -760,9 +843,10 @@ class _VehicleOption extends StatelessWidget {
           child: Row(
             children: [
               _VehicleAssetIcon(
-                vehicle: label,
-                iconBoxWidth: 48,
+                vehicle: vehicle,
+                iconBoxWidth: 52,
                 iconBoxHeight: 28,
+                color: selected ? DriverColors.orange : Colors.white,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -786,16 +870,14 @@ class _VehicleOption extends StatelessWidget {
                     color: selected ? DriverColors.orange : Colors.white54,
                     width: 1.4,
                   ),
-                  color: selected
-                      ? DriverColors.orange.withValues(alpha: 0.16)
-                      : Colors.transparent,
+                  color: selected ? DriverColors.orange : Colors.transparent,
                 ),
                 alignment: Alignment.center,
                 child: selected
                     ? const Icon(
                         Icons.check_rounded,
                         size: 14,
-                        color: DriverColors.orange,
+                        color: Colors.white,
                       )
                     : null,
               ),
@@ -830,15 +912,19 @@ class _SettingRow extends StatelessWidget {
             color: const Color(0x99FFFFFF),
           ),
           const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           trailing,
         ],
       ),
@@ -862,7 +948,7 @@ class _SegmentToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 104,
+      width: 124,
       height: 34,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
@@ -909,12 +995,16 @@ class _TogglePart extends StatelessWidget {
             color: selected ? DriverColors.orange : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.white : Colors.white54,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.white54,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),
@@ -940,7 +1030,7 @@ class _SwitchPill extends StatelessWidget {
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           color: value
-              ? DriverColors.orange.withValues(alpha: 0.26)
+              ? DriverColors.orange
               : Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(999),
         ),
@@ -952,7 +1042,7 @@ class _SwitchPill extends StatelessWidget {
             width: 20,
             height: 20,
             decoration: BoxDecoration(
-              color: value ? DriverColors.orange : Colors.white,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(999),
             ),
           ),

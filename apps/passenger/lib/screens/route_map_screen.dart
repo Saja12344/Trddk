@@ -10,10 +10,8 @@ import '../services/bus_arrival_notifications.dart';
 import '../services/passenger_api.dart';
 import '../ui/trddk_typography.dart';
 import '../widgets/left_back_button.dart';
-import '../widgets/onboarding/frosted_glass.dart';
 import '../widgets/onboarding/onboarding_theme.dart';
 import '../widgets/passenger_route_map.dart';
-import '../widgets/route_card.dart';
 import '../widgets/tardadi_brand_video.dart';
 import '../widgets/vehicle_icon.dart';
 
@@ -524,84 +522,74 @@ class _BusArrivalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
 
-    const titleColor = OnboardingTheme.glassText;
-    final chipTextColor = OnboardingTheme.white.withValues(alpha: 0.92);
-    final chipIconColor = OnboardingTheme.white.withValues(alpha: 0.85);
-    const iconBackground = Color.fromRGBO(255, 255, 255, 0.10);
-    const iconBorder = Color.fromRGBO(255, 255, 255, 0.14);
-    const chipBackground = Color.fromRGBO(255, 255, 255, 0.08);
-    const chipBorder = Color.fromRGBO(255, 255, 255, 0.12);
-
-    return FrostedGlass(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      borderRadius: 16,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: OnboardingTheme.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: OnboardingTheme.white.withValues(alpha: 0.06),
+        ),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Vehicle — same artwork the driver app uses.
           Container(
-            width: 56,
+            width: 64,
             height: 56,
             decoration: BoxDecoration(
-              color: iconBackground,
+              color: OnboardingTheme.background,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: iconBorder),
             ),
             alignment: Alignment.center,
             child: VehicleIcon(
               vehicleType: item.vehicleType,
-              color: chipIconColor,
-              size: 34,
+              color: OnboardingTheme.white,
+              size: 42,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         l10n.vehicleLabel(item.vehicleType, item.name),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TrddkTypography.text(
-                          color: titleColor,
+                          color: OnboardingTheme.white,
                           fontWeight: FontWeight.w700,
-                          fontSize: 18,
+                          fontSize: 17,
                           height: 1.15,
                         ),
                       ),
                     ),
-                    if (item.isLive) const _LiveBadge(),
+                    if (item.isLive) ...[
+                      const SizedBox(width: 8),
+                      const _LiveBadge(),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _ArrivalDetailChip(
-                      icon: Icons.schedule_rounded,
-                      label: l10n.minutesLabel(item.minutesAway),
-                      textColor: chipTextColor,
-                      iconColor: chipIconColor,
-                      backgroundColor: chipBackground,
-                      borderColor: chipBorder,
-                    ),
-                    _ArrivalDetailChip(
-                      icon: Icons.groups_2_rounded,
-                      label: l10n.crowdingLabel(item.crowdingLabel),
-                      textColor: chipTextColor,
-                      iconColor: chipIconColor,
-                      backgroundColor: chipBackground,
-                      borderColor: chipBorder,
-                    ),
-                  ],
-                ),
+                const SizedBox(height: 8),
+                _CrowdingIndicator(level: item.crowdingLabel),
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
+          _EtaBlock(minutes: item.minutesAway),
+          Container(
+            width: 1,
+            height: 40,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            color: OnboardingTheme.white.withValues(alpha: 0.08),
+          ),
           _NotificationBellButton(
             enabled: notificationsEnabled,
             onTap: onToggleNotifications,
@@ -612,101 +600,191 @@ class _BusArrivalCard extends StatelessWidget {
   }
 }
 
-class _LiveBadge extends StatelessWidget {
-  const _LiveBadge();
+/// Big, glanceable arrival time — the one number the rider cares about.
+class _EtaBlock extends StatelessWidget {
+  const _EtaBlock({required this.minutes});
+
+  final int minutes;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            OnboardingTheme.orange.withValues(alpha: 0.95),
-            OnboardingTheme.orange.withValues(alpha: 0.72),
-          ],
+    final arriving = minutes <= 0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          arriving ? l10n.etaNow : '$minutes',
+          style: TrddkTypography.text(
+            color: OnboardingTheme.orange,
+            fontSize: arriving ? 18 : 26,
+            fontWeight: FontWeight.w800,
+            height: 1.0,
+          ),
         ),
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: [
-          BoxShadow(
-            color: OnboardingTheme.orange.withValues(alpha: 0.35),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
+        if (!arriving) ...[
+          const SizedBox(height: 4),
           Text(
-            l10n.liveBadge,
+            l10n.etaUnit,
             style: TrddkTypography.text(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
+              color: OnboardingTheme.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              height: 1.0,
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _ArrivalDetailChip extends StatelessWidget {
-  const _ArrivalDetailChip({
-    required this.icon,
-    required this.label,
-    required this.textColor,
-    required this.iconColor,
-    required this.backgroundColor,
-    required this.borderColor,
-  });
+/// Three-step bar + label instead of a pill chip.
+class _CrowdingIndicator extends StatelessWidget {
+  const _CrowdingIndicator({required this.level});
 
-  final IconData icon;
-  final String label;
-  final Color textColor;
-  final Color iconColor;
-  final Color backgroundColor;
-  final Color borderColor;
+  final String level;
+
+  int get _filled => switch (level.toLowerCase()) {
+        'low' => 1,
+        'medium' => 2,
+        'high' => 3,
+        _ => 0,
+      };
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: iconColor),
-          const SizedBox(width: 6),
-          Text(
-            label,
+    final l10n = context.l10n;
+    final filled = _filled;
+    final activeColor =
+        filled >= 3 ? OnboardingTheme.orange : OnboardingTheme.white;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < 3; i++)
+          Container(
+            width: 5,
+            height: 8.0 + i * 3,
+            margin: const EdgeInsetsDirectional.only(end: 3),
+            decoration: BoxDecoration(
+              color: i < filled
+                  ? activeColor
+                  : OnboardingTheme.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            l10n.crowdingLabel(level),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TrddkTypography.text(
-              color: textColor,
+              color: OnboardingTheme.muted,
               fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
               height: 1.1,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
+
+/// Quiet live indicator: pulsing orange dot + label, no glossy pill.
+class _LiveBadge extends StatefulWidget {
+  const _LiveBadge();
+
+  @override
+  State<_LiveBadge> createState() => _LiveBadgeState();
+}
+
+class _LiveBadgeState extends State<_LiveBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    // SingleTickerProviderStateMixin mutes this ticker when TickerMode is off,
+    // so tests and goldens do not keep a frame scheduled.
+    _pulse.repeat();
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 14,
+          height: 14,
+          child: AnimatedBuilder(
+            animation: _pulse,
+            builder: (context, _) {
+              final t = _pulse.value;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 6 + 8 * t,
+                    height: 6 + 8 * t,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: OnboardingTheme.orange
+                          .withValues(alpha: 0.45 * (1 - t)),
+                    ),
+                  ),
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: OnboardingTheme.orange,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          l10n.liveBadge,
+          style: TrddkTypography.text(
+            color: OnboardingTheme.orange,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            height: 1.0,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+@visibleForTesting
+Widget previewBusArrivalCard({
+  required BusArrivalItem item,
+  bool notificationsEnabled = false,
+}) {
+  return _BusArrivalCard(
+    item: item,
+    notificationsEnabled: notificationsEnabled,
+    onToggleNotifications: () {},
+  );
 }
 
 class _NotificationBellButton extends StatelessWidget {
@@ -722,28 +800,30 @@ class _NotificationBellButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: 44,
-          height: 44,
+        customBorder: const CircleBorder(),
+        child: AnimatedContainer(
+          duration: OnboardingTheme.motionFast,
+          curve: OnboardingTheme.motionCurve,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
+            shape: BoxShape.circle,
             color: enabled
                 ? OnboardingTheme.orange
-                : OnboardingTheme.background.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: enabled
-                  ? OnboardingTheme.orange
-                  : OnboardingTheme.muted.withValues(alpha: 0.35),
-              width: 1.5,
-            ),
+                : OnboardingTheme.white.withValues(alpha: 0.08),
           ),
           child: Icon(
-            enabled ? Icons.notifications : Icons.notifications_outlined,
-            color: enabled ? Colors.white : OnboardingTheme.muted,
-            size: 22,
+            enabled
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_none_rounded,
+            color: enabled
+                ? OnboardingTheme.white
+                : OnboardingTheme.white.withValues(alpha: 0.75),
+            size: 21,
           ),
         ),
       ),

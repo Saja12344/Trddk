@@ -11,6 +11,10 @@ import {
 import { businessRef } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
 import { withTranslatedNames } from "../services/translate";
+import { bearerToken } from "../auth/driverAccess";
+import { parsePassengerSessionToken } from "../services/passengerSession";
+import { membershipAllowsPassenger } from "../services/passengerAccess";
+import type { BusinessMembership } from "@tardadi/shared";
 import {
   isPublicPassengerRoute,
   omitReviewPrivateFields,
@@ -30,6 +34,36 @@ router.use((req, res, next) => {
 });
 
 const LIVE_GPS_WINDOW_MS = 3 * 60 * 1000;
+
+async function passengerMaySeeBusiness(
+  req: { headers: { authorization?: string } },
+  businessId: string
+): Promise<boolean> {
+  const token = bearerToken(req as never);
+  const passenger = token ? parsePassengerSessionToken(token) : null;
+  if (!passenger?.sub || passenger.businessId !== businessId) return false;
+  const membership = await db
+    .collection(COLLECTIONS.users)
+    .doc(passenger.sub)
+    .collection(COLLECTIONS.memberships)
+    .doc(businessId)
+    .get();
+  if (!membership.exists) return false;
+  return membershipAllowsPassenger({
+    businessId,
+    ...(membership.data() as Omit<BusinessMembership, "businessId">),
+  });
+}
+
+async function assertPrivateRouteVisible(
+  req: { headers: { authorization?: string }; adminAuth?: { role?: string } | null },
+  businessId: string,
+  accessMode?: string
+): Promise<boolean> {
+  if (accessMode !== "private") return true;
+  if (req.adminAuth) return true;
+  return passengerMaySeeBusiness(req, businessId);
+}
 
 function isRecentlyUpdated(lastSeenAt: string | null | undefined): boolean {
   if (!lastSeenAt) return false;
@@ -123,6 +157,23 @@ router.get("/", optionalAdminWithPermission("routes:read"), async (req, res) => 
       return;
     }
 
+    if (!req.adminAuth) {
+      const businessId = resolveBusinessId(req, null);
+      if (!businessId) {
+        fail(res, "حدّد الشركة أولاً.", 400);
+        return;
+      }
+      const routes = await listRoutesForBusiness(businessId);
+      const member = await passengerMaySeeBusiness(req, businessId);
+      const visible = member
+        ? routes
+        : routes.filter((route) =>
+            isPublicPassengerRoute(route as { status?: string; accessMode?: string })
+          );
+      ok(res, await withTranslatedNames(visible as Record<string, unknown>[]));
+      return;
+    }
+
     const businessId = resolveBusinessId(req, req.adminAuth);
     const businessIds = await listAccessibleBusinessIds(
       db,
@@ -159,6 +210,16 @@ router.get("/:routeId/live", async (req, res) => {
       !isPublicPassengerRoute(routeData as { status?: string; accessMode?: string })
     ) {
       fail(res, STORE_REVIEW_FORBIDDEN, 403);
+      return;
+    }
+    if (
+      !(await assertPrivateRouteVisible(
+        req,
+        businessId,
+        routeData.accessMode as string | undefined
+      ))
+    ) {
+      fail(res, "هذا الخط خاص بالشركة.", 403);
       return;
     }
 
@@ -269,6 +330,16 @@ router.get("/:routeId", optionalAdminWithPermission("routes:read"), async (req, 
       !isPublicPassengerRoute(routeData as { status?: string; accessMode?: string })
     ) {
       fail(res, STORE_REVIEW_FORBIDDEN, 403);
+      return;
+    }
+    if (
+      !(await assertPrivateRouteVisible(
+        req,
+        businessId,
+        routeData.accessMode as string | undefined
+      ))
+    ) {
+      fail(res, "هذا الخط خاص بالشركة.", 403);
       return;
     }
     const intermediateStops = stopsSnapshot.size;
@@ -419,10 +490,27 @@ router.delete("/:routeId", requirePermission("routes:write"), async (req, res) =
     const businessId = requireBusinessId(req, req.adminAuth);
     const routeId = paramId(req.params.routeId);
 
-    await businessRef(db, businessId)
+    const routeRef = businessRef(db, businessId)
       .collection(COLLECTIONS.routes)
-      .doc(routeId)
-      .delete();
+      .doc(routeId);
+    const [buses, drivers, activeTrips] = await Promise.all([
+      businessRef(db, businessId).collection(COLLECTIONS.buses).get(),
+      businessRef(db, businessId).collection(COLLECTIONS.drivers).get(),
+      businessRef(db, businessId)
+        .collection(COLLECTIONS.trips)
+        .where("tripStatus", "==", "active")
+        .get(),
+    ]);
+    const used =
+      buses.docs.some((doc) => doc.data().routeId === routeId) ||
+      drivers.docs.some((doc) => doc.data().assignedRouteId === routeId) ||
+      activeTrips.docs.some((doc) => doc.data().routeId === routeId);
+    if (used) {
+      fail(res, "لا يمكن حذف خط عليه باص أو سائق أو رحلة مفتوحة.", 409);
+      return;
+    }
+
+    await routeRef.delete();
 
     ok(res, { routeId, deleted: true });
   } catch (error) {

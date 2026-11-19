@@ -1,9 +1,12 @@
 import { Router } from "express";
-import { COLLECTIONS, normalizePhone } from "@tardadi/shared";
+import { COLLECTIONS, normalizePhone, requireSaudiMobile } from "@tardadi/shared";
 import { db } from "../firebase";
 import { requirePermission } from "../auth/middleware";
 import { DRIVER_WRITE_FIELDS, pickAllowedFields } from "../auth/driverAccess";
 import { resolveBusinessId, requireBusinessId, withBusinessId } from "../auth/scope";
+import { createOrLinkUser } from "../services/users";
+import { DriverAssignmentError, saveDriverAssignment } from "../services/driverAssignment";
+import { driverPhoneConflict } from "../services/driverPhone";
 import {
   listAccessibleBusinessIds,
   mapAcrossBusinesses,
@@ -85,61 +88,76 @@ router.get("/me", requirePermission("drivers:read"), async (req, res) => {
 router.post("/", requirePermission("drivers:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
-    const {
-      name,
-      phone,
-      assignedRouteId,
-      assignedBusId,
-      status = "active",
-    } = req.body;
-
+    const name = String(req.body?.name ?? "").trim();
+    const phone = String(req.body?.phone ?? "");
+    const busId = (req.body?.busId || req.body?.assignedBusId || null) as string | null;
     if (!name || !phone) {
       fail(res, "name and phone are required");
       return;
     }
 
-    const normalizedPhone = normalizePhone(phone);
+    const saved = await saveDriverAssignment(db, {
+      businessId,
+      name,
+      phone,
+      busId,
+      driverId: (req.body?.driverId as string | undefined) ?? null,
+      replace: req.body?.replace === true,
+    });
 
-    const existing = await businessRef(db, businessId)
-      .collection(COLLECTIONS.drivers)
-      .where("phone", "==", normalizedPhone)
+    const prior = await db
+      .collection(COLLECTIONS.users)
+      .where("phone", "==", saved.phone)
       .limit(1)
       .get();
-
-    if (!existing.empty) {
-      fail(res, "رقم الجوال مسجل مسبقاً", 409);
-      return;
+    const priorUid = prior.empty ? null : prior.docs[0].id;
+    let existingPassenger = false;
+    if (priorUid) {
+      const membership = await db
+        .collection(COLLECTIONS.users)
+        .doc(priorUid)
+        .collection(COLLECTIONS.memberships)
+        .doc(businessId)
+        .get();
+      existingPassenger = membership.data()?.passengerAccess === true;
     }
+    const keepPassenger =
+      req.body?.keepPassenger === false
+        ? false
+        : req.body?.keepPassenger === true
+          ? true
+          : existingPassenger;
 
-    const now = new Date().toISOString();
-    const docRef = await businessRef(db, businessId)
-      .collection(COLLECTIONS.drivers)
-      .add({
-        name,
-        phone: normalizedPhone,
-        driverCode: null,
-        assignedRouteId: assignedRouteId || null,
-        assignedBusId: assignedBusId || null,
-        status,
-        createdAt: now,
-        updatedAt: now,
-      });
+    const auth = req.adminAuth!;
+    const linked = await createOrLinkUser({
+      phone: saved.phone,
+      displayName: name,
+      primaryRole: keepPassenger ? "employee" : "driver",
+      createdBy: auth.firebaseUser?.uid ?? auth.userId,
+      businessId,
+      membershipRole: keepPassenger ? "employee" : "driver",
+      driverId: saved.driverId,
+      source: "manual",
+      passengerAccess: keepPassenger,
+      driverAccess: true,
+    });
 
     ok(
       res,
       withBusinessId(businessId, {
-        driverId: docRef.id,
+        driverId: saved.driverId,
+        uid: linked.uid,
         name,
-        phone: normalizedPhone,
-        assignedRouteId,
-        assignedBusId,
-        status,
+        phone: saved.phone,
+        assignedRouteId: saved.routeId,
+        assignedBusId: saved.busId,
+        status: "active",
       }),
       201
     );
   } catch (error) {
-    const err = error as Error & { status?: number };
-    fail(res, err.message, err.status ?? 500);
+    const err = error as DriverAssignmentError;
+    fail(res, err.message, err.status ?? 400);
   }
 });
 
@@ -148,19 +166,53 @@ router.put("/:driverId", requirePermission("drivers:write"), async (req, res) =>
     const businessId = requireBusinessId(req, req.adminAuth);
     const { driverId: rawDriverId } = req.params;
     const driverId = paramId(rawDriverId);
+    const driverRef = businessRef(db, businessId)
+      .collection(COLLECTIONS.drivers)
+      .doc(driverId);
+    const current = await driverRef.get();
+    if (!current.exists) {
+      fail(res, "Driver not found", 404);
+      return;
+    }
+
     const updates: Record<string, unknown> = {
       ...pickAllowedFields(req.body ?? {}, DRIVER_WRITE_FIELDS),
       updatedAt: new Date().toISOString(),
     };
 
     if (typeof updates.phone === "string") {
-      updates.phone = normalizePhone(updates.phone);
+      const phone = requireSaudiMobile(updates.phone);
+      const businesses = await db.collection(COLLECTIONS.businesses).get();
+      const allOwners = [];
+      for (const business of businesses.docs) {
+        const drivers = await business.ref.collection(COLLECTIONS.drivers).get();
+        for (const driver of drivers.docs) {
+          const data = driver.data();
+          const stored = (data.phone as string) || "";
+          if (normalizePhone(stored) !== phone && stored !== phone) continue;
+          allOwners.push({
+            businessId: business.id,
+            driverId: driver.id,
+            name: (data.name as string) || "",
+            phone: stored,
+          });
+        }
+      }
+      const conflict = driverPhoneConflict({
+        normalizedPhone: phone,
+        owners: allOwners,
+        businessId,
+        driverId,
+        previousPhone: (current.data()?.phone as string | undefined) ?? null,
+      });
+      if (!conflict.ok) {
+        fail(res, conflict.message, 409);
+        return;
+      }
+      updates.phone = phone;
     }
 
-    await businessRef(db, businessId)
-      .collection(COLLECTIONS.drivers)
-      .doc(driverId)
-      .update(updates);
+    await driverRef.update(updates);
 
     ok(res, withBusinessId(businessId, { driverId, ...updates }));
   } catch (error) {
@@ -178,9 +230,17 @@ router.delete("/:driverId", requirePermission("drivers:write"), async (req, res)
     await businessRef(db, businessId)
       .collection(COLLECTIONS.drivers)
       .doc(driverId)
-      .delete();
+      .set(
+        {
+          status: "inactive",
+          assignedRouteId: null,
+          assignedBusId: null,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
 
-    ok(res, { driverId, deleted: true });
+    ok(res, { driverId, deleted: false, deactivated: true });
   } catch (error) {
     const err = error as Error & { status?: number };
     fail(res, err.message, err.status ?? 500);

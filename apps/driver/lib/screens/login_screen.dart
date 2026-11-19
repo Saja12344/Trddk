@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tardadi_core/tardadi_core.dart';
@@ -460,33 +461,59 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _loginError(Object error) {
     final raw = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
-    final code = error is FirebaseAuthException ? error.code : raw;
-    if (code.contains('invalid-phone-number') ||
+    final firebaseCode = error is FirebaseAuthException ? error.code : '';
+    final trailing = RegExp(r'\n\(([^)\n]+)\)\s*$').firstMatch(raw);
+    final trailingCode = trailing?.group(1) ?? '';
+    final visibleRaw = trailing == null
+        ? raw.trim()
+        : raw.substring(0, trailing.start).trim();
+    final lookup = firebaseCode.isNotEmpty ? firebaseCode : raw;
+
+    String present(String message, String code) {
+      if (code.isNotEmpty) debugPrint('driver login error: $code');
+      if (kDebugMode && code.isNotEmpty) return '$message\n($code)';
+      return message;
+    }
+
+    if (lookup.contains('invalid-phone-number') ||
         raw.contains('badly formatted') ||
         raw.contains('invalid-email')) {
+      if (firebaseCode.isNotEmpty) debugPrint('driver login error: $firebaseCode');
       return context.l10n.enterPhone;
     }
-    // Show Firebase's error code under the message so the real cause
-    // (quota, app not authorized, region blocked...) is visible when testing.
-    final ref = error is FirebaseAuthException ? '\n(${error.code})' : '';
-    if (code.contains('too-many-requests') || code.contains('quota')) {
-      return '${context.l10n.otpQuota}$ref';
+    if (lookup.contains('too-many-requests') || lookup.contains('quota')) {
+      return present(
+        context.l10n.otpQuota,
+        firebaseCode.isNotEmpty ? firebaseCode : 'quota',
+      );
     }
-    if (code.contains('invalid-verification-code') ||
-        code.contains('invalid-verification-id') ||
-        code.contains('session-expired')) {
+    if (lookup.contains('invalid-verification-code') ||
+        lookup.contains('invalid-verification-id') ||
+        lookup.contains('session-expired')) {
+      if (firebaseCode.isNotEmpty) debugPrint('driver login error: $firebaseCode');
       return context.l10n.invalidOtp;
     }
     if (raw.contains('تعذّر إرسال رمز التحقق') ||
         raw.contains('تعذر إرسال رمز التحقق')) {
-      return '${context.l10n.otpSendFailed}\n(SMS_PROVIDER_MISSING)';
+      return present(context.l10n.otpSendFailed, 'SMS_PROVIDER_MISSING');
     }
-    if (code.contains('missing-client-identifier') ||
-        code.contains('app-not-authorized') ||
-        code.contains('captcha-check-failed')) {
-      return '${context.l10n.otpSendFailed}$ref';
+    if (lookup.contains('missing-client-identifier') ||
+        lookup.contains('app-not-authorized') ||
+        lookup.contains('captcha-check-failed')) {
+      return present(
+        context.l10n.otpSendFailed,
+        firebaseCode.isNotEmpty ? firebaseCode : trailingCode,
+      );
     }
-    return raw.trim().isEmpty ? '${context.l10n.otpSendFailed}$ref' : raw.trim();
+    if (visibleRaw.isEmpty) {
+      return present(
+        context.l10n.otpSendFailed,
+        firebaseCode.isNotEmpty ? firebaseCode : trailingCode,
+      );
+    }
+    if (trailingCode.isNotEmpty) return present(visibleRaw, trailingCode);
+    if (firebaseCode.isNotEmpty) return present(visibleRaw, firebaseCode);
+    return visibleRaw;
   }
 
   @override

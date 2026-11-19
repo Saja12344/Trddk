@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import type { Bus } from "@tardadi/shared";
 import { api } from "@/lib/api";
-import { adminFetch } from "@/lib/adminFetch";
 import { getUserErrorMessage } from "@/lib/errorMessage";
 import BusinessBadge from "@/components/BusinessBadge";
 import { useBusinessMap, useShowBusinessColumn } from "@/hooks/useBusinessMap";
@@ -12,34 +11,13 @@ export default function BusesPage() {
   const businessMap = useBusinessMap();
   const showBusiness = useShowBusinessColumn();
   const [buses, setBuses] = useState<Bus[]>([]);
-  const [plateNo, setPlateNo] = useState("");
-  const [label, setLabel] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   async function load() {
     try {
       const data = (await api.getBuses()) as Bus[];
       setBuses(data);
       setError("");
-    } catch (e) {
-      setError(getUserErrorMessage(e));
-    }
-  }
-
-  async function createBus(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    try {
-      await adminFetch<Bus>("/api/buses", {
-        method: "POST",
-        body: JSON.stringify({ plateNo, label }),
-      });
-      setPlateNo("");
-      setLabel("");
-      setSuccess("تمت إضافة الباص");
-      await load();
     } catch (e) {
       setError(getUserErrorMessage(e));
     }
@@ -53,39 +31,17 @@ export default function BusesPage() {
     <>
       <div className="page-header">
         <h1>الباصات</h1>
-        <p>أضف مركبات النقل — المسار يُحدَّد على الخط، مو على الباص.</p>
+        <p>الباصات تُضاف من داخل الخط. هذه الصفحة للعرض.</p>
       </div>
 
+      {error && <div className="alert alert-error">{error}</div>}
       <div className="grid-2">
-        <form className="card" onSubmit={createBus}>
-          <h3>إضافة باص جديد</h3>
-          {error && <div className="alert alert-error">{error}</div>}
-          {success && <div className="alert alert-success">{success}</div>}
-
-          <div className="field">
-            <label>رقم اللوحة</label>
-            <input
-              placeholder="مثال: ABC-1234"
-              value={plateNo}
-              onChange={(e) => setPlateNo(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="field">
-            <label>اسم الباص</label>
-            <input
-              placeholder="مثال: باص 12"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              required
-            />
-          </div>
-
-          <button className="btn" type="submit">
-            حفظ الباص
-          </button>
-        </form>
+        <div className="card">
+          <h3>إضافة الباص</h3>
+          <p className="muted">
+            الباص يتبع خطاً واحداً. أضفه من صفحة الخط، ويأخذ السائق خطه من الباص.
+          </p>
+        </div>
 
         <div className="card table-wrap">
           <h3>الباصات ({buses.length})</h3>

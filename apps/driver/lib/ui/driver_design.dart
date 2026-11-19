@@ -10,7 +10,9 @@ class DriverColors {
   static const navy = Color(0xFF12144A);
   static const navyDeep = Color(0xFF12144A);
   static const navyPanel = Color(0xFF24277A);
-  static const sideMenu = Color(0xFF24277A);
+  /// Side menu / settings panel. Darker than [navyPanel] so orange
+  /// icons and text keep enough contrast.
+  static const sideMenu = Color(0xFF181B55);
   static const orange = Color(0xFFEA4F26);
   static const muted = Color(0xFF9EA0AA);
   static const softWhite = Color(0xFFF8F8F8);
@@ -150,53 +152,72 @@ class DriverSidePanel extends StatelessWidget {
     final bottom = MediaQuery.paddingOf(context).bottom;
     final width = MediaQuery.sizeOf(context).width;
     final peekWidth = width * 0.2;
+    // Same color as the peek column, including its safe-area strips,
+    // so the status bar and home indicator don't draw a sideMenu band
+    // across the 20% peek.
+    final peekColor = DriverColors.navy.withValues(alpha: 0.72);
+
+    Widget safeStrip(double height) {
+      if (height <= 0) return const SizedBox.shrink();
+      return SizedBox(
+        height: height,
+        child: Row(
+          children: [
+            ColoredBox(
+              color: peekColor,
+              child: SizedBox(width: peekWidth, height: height),
+            ),
+            const Expanded(
+              child: ColoredBox(color: DriverColors.sideMenu),
+            ),
+          ],
+        ),
+      );
+    }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: DriverChrome._overlayStyle,
       child: Scaffold(
         backgroundColor: DriverColors.navy,
         body: Column(
-        children: [
-          SizedBox(height: top, child: const ColoredBox(color: DriverColors.navyPanel)),
-          Expanded(
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: onClose,
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    width: peekWidth,
-                    child: ColoredBox(
-                      color: DriverColors.navy.withValues(alpha: 0.72),
-                      child: const Align(
-                        alignment: Alignment.topCenter,
-                        child: Padding(
-                          padding: EdgeInsets.only(top: 42),
-                          child: Icon(
-                            Icons.menu_rounded,
-                            color: Colors.white,
-                            size: 32,
+          children: [
+            safeStrip(top),
+            Expanded(
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: onClose,
+                    behavior: HitTestBehavior.opaque,
+                    child: SizedBox(
+                      width: peekWidth,
+                      child: ColoredBox(
+                        color: peekColor,
+                        child: const Align(
+                          alignment: Alignment.topCenter,
+                          child: Padding(
+                            padding: EdgeInsets.only(top: 42),
+                            child: Icon(
+                              Icons.menu_rounded,
+                              color: Colors.white,
+                              size: 32,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: ColoredBox(
-                    color: DriverColors.navyPanel,
-                    child: child,
+                  Expanded(
+                    child: ColoredBox(
+                      color: DriverColors.sideMenu,
+                      child: child,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          SizedBox(
-            height: bottom,
-            child: const ColoredBox(color: DriverColors.navyPanel),
-          ),
-        ],
-      ),
+            safeStrip(bottom),
+          ],
+        ),
       ),
     );
   }
@@ -287,7 +308,9 @@ class DriverButton extends StatelessWidget {
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
-          disabledBackgroundColor: DriverColors.card,
+          // Disabled: readable but clearly inactive (faint fill + outline).
+          disabledBackgroundColor: Colors.white.withValues(alpha: 0.06),
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
           foregroundColor: textColor,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -296,6 +319,7 @@ class DriverButton extends StatelessWidget {
               color: onPressed == null
                   ? Colors.white.withValues(alpha: 0.18)
                   : Colors.transparent,
+              width: 1.5,
             ),
           ),
           textStyle: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w800),

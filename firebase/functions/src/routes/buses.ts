@@ -11,6 +11,7 @@ import {
 } from "../business/access";
 import { businessRef } from "../business/helpers";
 import { fail, ok, paramId } from "../utils";
+import { decideBusRouteMove } from "../services/driverAssignmentRules";
 import { rejectStoreReviewAccess } from "../services/passengerReview";
 
 const router = Router();
@@ -53,10 +54,19 @@ router.get("/", optionalAdminWithPermission("buses:read"), async (req, res) => {
 router.post("/", requirePermission("buses:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
-    const { plateNo, label, status = "active" } = req.body;
+    const { plateNo, label, status = "active", routeId } = req.body;
 
-    if (!plateNo || !label) {
-      fail(res, "plateNo and label are required");
+    if (!plateNo || !label || !routeId) {
+      fail(res, "أضف الباص من صفحة الخط: اللوحة والاسم والخط مطلوبة.");
+      return;
+    }
+
+    const routeDoc = await businessRef(db, businessId)
+      .collection(COLLECTIONS.routes)
+      .doc(routeId)
+      .get();
+    if (!routeDoc.exists) {
+      fail(res, "الخط غير موجود.", 404);
       return;
     }
 
@@ -67,6 +77,7 @@ router.post("/", requirePermission("buses:write"), async (req, res) => {
         plateNo,
         label,
         status,
+        routeId,
         currentTripId: null,
         currentLocation: null,
         lastSeenAt: null,
@@ -76,7 +87,13 @@ router.post("/", requirePermission("buses:write"), async (req, res) => {
 
     ok(
       res,
-      withBusinessId(businessId, { busId: docRef.id, plateNo, label, status }),
+      withBusinessId(businessId, {
+        busId: docRef.id,
+        plateNo,
+        label,
+        status,
+        routeId,
+      }),
       201
     );
   } catch (error) {
@@ -106,15 +123,72 @@ router.put("/:busId", requirePermission("buses:write"), async (req, res) => {
   }
 });
 
+router.post("/:busId/route", requirePermission("buses:write"), async (req, res) => {
+  try {
+    const businessId = requireBusinessId(req, req.adminAuth);
+    const busId = paramId(req.params.busId);
+    const routeId = String(req.body?.routeId ?? "");
+    if (!routeId) {
+      fail(res, "الخط مطلوب.");
+      return;
+    }
+    const routeDoc = await businessRef(db, businessId)
+      .collection(COLLECTIONS.routes)
+      .doc(routeId)
+      .get();
+    if (!routeDoc.exists) {
+      fail(res, "الخط غير موجود.", 404);
+      return;
+    }
+    const activeTrip = await businessRef(db, businessId)
+      .collection(COLLECTIONS.trips)
+      .where("busId", "==", busId)
+      .where("tripStatus", "==", "active")
+      .limit(1)
+      .get();
+    const decision = decideBusRouteMove(!activeTrip.empty);
+    if (!decision.ok) {
+      fail(res, decision.message, 409);
+      return;
+    }
+    const now = new Date().toISOString();
+    await businessRef(db, businessId).collection(COLLECTIONS.buses).doc(busId).update({
+      routeId,
+      updatedAt: now,
+    });
+    const drivers = await businessRef(db, businessId).collection(COLLECTIONS.drivers).get();
+    await Promise.all(
+      drivers.docs
+        .filter((doc) => doc.data().assignedBusId === busId)
+        .map((doc) => doc.ref.set({ assignedRouteId: routeId, updatedAt: now }, { merge: true }))
+    );
+    ok(res, withBusinessId(businessId, { busId, routeId }));
+  } catch (error) {
+    const err = error as Error & { status?: number };
+    fail(res, err.message, err.status ?? 500);
+  }
+});
+
 router.delete("/:busId", requirePermission("buses:write"), async (req, res) => {
   try {
     const businessId = requireBusinessId(req, req.adminAuth);
     const busId = paramId(req.params.busId);
 
-    await businessRef(db, businessId)
-      .collection(COLLECTIONS.buses)
-      .doc(busId)
-      .delete();
+    const busRef = businessRef(db, businessId).collection(COLLECTIONS.buses).doc(busId);
+    const drivers = await businessRef(db, businessId).collection(COLLECTIONS.drivers).get();
+    const assigned = drivers.docs.some((doc) => doc.data().assignedBusId === busId);
+    const activeTrip = await businessRef(db, businessId)
+      .collection(COLLECTIONS.trips)
+      .where("busId", "==", busId)
+      .where("tripStatus", "==", "active")
+      .limit(1)
+      .get();
+    if (assigned || !activeTrip.empty) {
+      fail(res, "لا يمكن حذف باص عليه سائق أو رحلة مفتوحة. فك التعيين أولاً.", 409);
+      return;
+    }
+
+    await busRef.delete();
 
     ok(res, { busId, deleted: true });
   } catch (error) {

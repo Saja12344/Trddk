@@ -33,13 +33,7 @@ const allNavItems = [
   },
   { href: "/routes", label: "الخطوط", icon: "routes" as const, superOnly: false },
   { href: "/buses", label: "الباصات", icon: "buses" as const, superOnly: false },
-  {
-    href: "/drivers",
-    label: "السائقين",
-    icon: "drivers" as const,
-    superOnly: false,
-  },
-  { href: "/trips", label: "الرحلات", icon: "trips" as const, superOnly: false },
+  { href: "/operations", label: "التشغيل", icon: "trips" as const, superOnly: false },
 ];
 
 function NavIconGlyph({ icon }: { icon: NavIcon }) {

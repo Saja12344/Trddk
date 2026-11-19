@@ -15,6 +15,8 @@ export interface LocationPlace {
   address: string;
   latitude: number;
   longitude: number;
+  addressAr?: string;
+  addressEn?: string;
 }
 
 /** Transportation company workspace (Roshn, SAPTCO, etc.). */
@@ -138,6 +140,8 @@ export interface Driver {
   assignedRouteId?: string;
   assignedBusId?: string;
   status: EntityStatus;
+  nameAr?: string;
+  nameEn?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -149,7 +153,11 @@ export interface Bus {
   organizationId: string;
   plateNo: string;
   label: string;
+  labelAr?: string;
+  labelEn?: string;
   status: EntityStatus;
+  /** The one route this bus runs. Drivers copy this onto assignedRouteId. */
+  routeId?: string | null;
   currentTripId?: string | null;
   currentLocation?: GeoPoint | null;
   lastSeenAt?: string | null;
@@ -166,6 +174,8 @@ export interface Route {
   /** @deprecated Use businessId */
   organizationId: string;
   name: string;
+  nameAr?: string;
+  nameEn?: string;
   code: string;
   colorHex: string;
   status: EntityStatus;
@@ -181,6 +191,8 @@ export interface Stop {
   stopId: string;
   routeId: string;
   name: string;
+  nameAr?: string;
+  nameEn?: string;
   latitude: number;
   longitude: number;
   sequenceNo: number;

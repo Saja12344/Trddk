@@ -111,13 +111,10 @@ export default function DashboardPage() {
             </Link>
           )}
           <Link href="/routes" className="step active">
-            إضافة خط
+            إضافة خط وباص
           </Link>
-          <Link href="/buses" className="step active">
-            إضافة باص
-          </Link>
-          <Link href="/drivers" className="step active">
-            إضافة سائق
+          <Link href="/operations?tab=now" className="step active">
+            التشغيل
           </Link>
         </div>
       </div>

@@ -168,6 +168,7 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
     });
 
     for (const driver of drivers) {
+      if (driver.status === "inactive") continue;
       const key = phoneKey(driver.phone);
       if (key && usedPhones.has(key)) continue;
       people.push({
@@ -217,26 +218,6 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
     });
   }
 
-  async function saveDriverAssignment(
-    driverId: string,
-    phone: string,
-    name: string,
-    routeId: string,
-    busId: string,
-    status: "active" | "inactive" = "active"
-  ) {
-    await adminFetch(`/api/drivers/${driverId}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        name,
-        phone,
-        status,
-        assignedRouteId: routeId || null,
-        assignedBusId: busId || null,
-      }),
-    });
-  }
-
   async function saveEdit() {
     if (!edit) return;
     setSaving(true);
@@ -257,85 +238,55 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
     }
 
     try {
-      if (!edit.uid) {
+      if (edit.role === "driver") {
+        if (!edit.busId) {
+          throw new Error("اختر باصاً مربوطاً بخط.");
+        }
+        await adminFetch("/api/drivers", {
+          method: "POST",
+          body: JSON.stringify({
+            name: edit.name,
+            phone,
+            busId: edit.busId,
+            driverId: edit.driverId,
+            keepPassenger: edit.wasBoth,
+          }),
+        });
+      } else if (!edit.uid) {
         const created = await adminFetch<{ uid: string }>("/api/users/invite", {
           method: "POST",
           body: JSON.stringify({
             phone,
             email: edit.email.trim() || undefined,
             displayName: edit.name,
-            primaryRole:
-              edit.role === "admin"
-                ? "business_admin"
-                : edit.role === "driver"
-                  ? "driver"
-                  : "employee",
-            membershipRole:
-              edit.role === "admin"
-                ? "business_admin"
-                : edit.role === "driver"
-                  ? "driver"
-                  : "employee",
+            primaryRole: edit.role === "admin" ? "business_admin" : "employee",
+            membershipRole: edit.role === "admin" ? "business_admin" : "employee",
             businessId,
           }),
         });
-        const linked = await adminFetch<{ driverId: string | null }>(
-          `/api/businesses/${businessId}/employees/${created.uid}`,
-          {
+        if (edit.role === "admin") {
+          await adminFetch(`/api/businesses/${businessId}/employees/${created.uid}`, {
             method: "PATCH",
             body: JSON.stringify({
               phone,
-              appRole: edit.role,
-              passengerAccess: edit.role === "passenger",
-              driverAccess: edit.role === "driver",
-              ...(edit.email.trim() ? { email: edit.email.trim() } : {}),
-            }),
-          }
-        );
-        const driverId = linked?.driverId || edit.driverId;
-        if (edit.role === "driver" && driverId) {
-          await saveDriverAssignment(
-            driverId,
-            phone,
-            edit.name,
-            edit.routeId,
-            edit.busId
-          );
-        }
-      } else {
-        const result = await adminFetch<{ driverId: string | null }>(
-          `/api/businesses/${businessId}/employees/${edit.uid}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              phone,
-              appRole: edit.role,
-              passengerAccess: edit.role === "passenger",
-              driverAccess: edit.role === "driver",
-              ...(edit.role === "admin" ? { email: edit.email.trim() } : {}),
-            }),
-          }
-        );
-        const driverId = result?.driverId || edit.driverId;
-        if (edit.role === "driver" && driverId) {
-          await saveDriverAssignment(
-            driverId,
-            phone,
-            edit.name,
-            edit.routeId,
-            edit.busId
-          );
-        } else if (edit.role === "driver" && !driverId) {
-          await adminFetch("/api/drivers", {
-            method: "POST",
-            body: JSON.stringify({
-              name: edit.name,
-              phone,
-              assignedRouteId: edit.routeId,
-              assignedBusId: edit.busId,
+              appRole: "admin",
+              passengerAccess: false,
+              driverAccess: false,
+              email: edit.email.trim(),
             }),
           });
         }
+      } else {
+        await adminFetch(`/api/businesses/${businessId}/employees/${edit.uid}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            phone,
+            appRole: edit.role,
+            passengerAccess: edit.role === "passenger",
+            driverAccess: false,
+            ...(edit.role === "admin" ? { email: edit.email.trim() } : {}),
+          }),
+        });
       }
 
       setMessage("تم حفظ التعديل.");
@@ -442,6 +393,8 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
               <th>الاسم</th>
               <th>الجوال</th>
               <th>الدور</th>
+              <th>الخط</th>
+              <th>الباص</th>
               <th>الحالة</th>
               <th>إجراءات</th>
             </tr>
@@ -452,6 +405,12 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
                 <td>{row.name}</td>
                 <td dir="ltr">{row.phone || "—"}</td>
                 <td>{ROLE_LABELS[row.role]}</td>
+                <td>
+                  {routes.find((route) => route.routeId === row.routeId)?.name || "—"}
+                </td>
+                <td>
+                  {buses.find((bus) => bus.busId === row.busId)?.label || "—"}
+                </td>
                 <td>
                   <span
                     className={`badge ${row.status === "active" ? "badge-success" : "badge-muted"}`}
@@ -488,7 +447,7 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
             ))}
             {!filtered.length && (
               <tr>
-                <td colSpan={5} className="empty-cell">
+                <td colSpan={7} className="empty-cell">
                   لا يوجد مستفيدون.
                 </td>
               </tr>
@@ -569,42 +528,33 @@ export function BusinessEmployeesPanel({ businessId }: Props) {
               </div>
             )}
             {edit.role === "driver" && (
-              <>
-                <div className="field">
-                  <label htmlFor="edit-route">الخط</label>
-                  <select
-                    id="edit-route"
-                    value={edit.routeId}
-                    onChange={(event) =>
-                      setEdit({ ...edit, routeId: event.target.value })
-                    }
-                  >
-                    <option value="">بدون خط</option>
-                    {routes.map((route) => (
-                      <option key={route.routeId} value={route.routeId}>
-                        {route.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="edit-bus">الباص</label>
-                  <select
-                    id="edit-bus"
-                    value={edit.busId}
-                    onChange={(event) =>
-                      setEdit({ ...edit, busId: event.target.value })
-                    }
-                  >
-                    <option value="">بدون باص</option>
-                    {buses.map((bus) => (
+              <div className="field">
+                <label htmlFor="edit-bus">الباص</label>
+                <select
+                  id="edit-bus"
+                  value={edit.busId}
+                  onChange={(event) => {
+                    const bus = buses.find((item) => item.busId === event.target.value);
+                    setEdit({
+                      ...edit,
+                      busId: event.target.value,
+                      routeId: bus?.routeId ?? "",
+                    });
+                  }}
+                >
+                  <option value="">اختر الباص</option>
+                  {buses
+                    .filter((bus) => bus.routeId)
+                    .map((bus) => (
                       <option key={bus.busId} value={bus.busId}>
                         {bus.label}
+                        {routes.find((route) => route.routeId === bus.routeId)
+                          ? ` · ${routes.find((route) => route.routeId === bus.routeId)?.name}`
+                          : ""}
                       </option>
                     ))}
-                  </select>
-                </div>
-              </>
+                </select>
+              </div>
             )}
             <div className="form-actions">
               <button

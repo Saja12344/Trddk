@@ -17,6 +17,7 @@ class DriverPrefs {
   static const _otpAtKey = 'driver_otp_saved_at';
   static const _navVoiceMutedKey = 'nav_voice_muted';
   static const _navVoiceNoticeKey = 'nav_voice_notice_seen';
+  static const _notificationsKey = 'driver_notifications_enabled';
 
   String _setupKey(String driverKey) => 'vehicle_setup_done_$driverKey';
   String _vehicleKey(String driverKey) => 'selected_vehicle_$driverKey';
@@ -53,6 +54,16 @@ class DriverPrefs {
   Future<void> saveLocaleCode(String code) async {
     await init();
     await _prefs!.setString(_localeKey, code);
+  }
+
+  Future<bool> notificationsEnabled() async {
+    await init();
+    return _prefs!.getBool(_notificationsKey) ?? true;
+  }
+
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    await init();
+    await _prefs!.setBool(_notificationsKey, enabled);
   }
 
   Future<bool> isNavVoiceMuted() async {

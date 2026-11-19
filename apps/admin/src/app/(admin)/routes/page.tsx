@@ -17,6 +17,7 @@ import { routeEndpointsToMarkers, stopsToMarkers } from "@/lib/mapUtils";
 import { sortPlacesAlongRoute } from "@/lib/routeOrdering";
 import { getUserErrorMessage } from "@/lib/errorMessage";
 import BusinessBadge from "@/components/BusinessBadge";
+import RouteFleet from "@/components/RouteFleet";
 import { useBusinessMap, useShowBusinessColumn } from "@/hooks/useBusinessMap";
 
 type PanelMode = "list" | "create" | "detail";
@@ -543,6 +544,7 @@ export default function RoutesPage() {
                 محطة (بداية + {stops.length} وسيطة + نهاية)
               </p>
             )}
+            <RouteFleet route={selectedRoute} />
             <button
               type="button"
               className="btn btn-danger"

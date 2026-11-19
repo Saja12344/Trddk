@@ -163,14 +163,7 @@ export function pickAllowedFields(
 }
 
 export const BUS_WRITE_FIELDS = ["plateNo", "label", "status"] as const;
-export const DRIVER_WRITE_FIELDS = [
-  "name",
-  "phone",
-  "assignedRouteId",
-  "assignedBusId",
-  "status",
-  "driverCode",
-] as const;
+export const DRIVER_WRITE_FIELDS = ["name", "phone", "status", "driverCode"] as const;
 export const ROUTE_WRITE_FIELDS = [
   "name",
   "code",

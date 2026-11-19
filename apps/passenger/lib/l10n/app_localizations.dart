@@ -37,8 +37,13 @@ class AppLocalizations {
   String get mode => isArabic ? 'الوضع' : 'Mode';
   String get business => isArabic ? 'أعمال' : 'Business';
   String get publicMode => isArabic ? 'عام' : 'Public';
-  String get eng => 'Eng';
-  String get ar => 'Ar';
+  String get eng => 'English';
+  String get ar => 'العربية';
+  String get accountTypeLabel => isArabic ? 'نوع الحساب' : 'Account type';
+  String get continueLabel => isArabic ? 'متابعة' : 'Continue';
+  String get businessSignInHint => isArabic
+      ? 'سيُطلب منك تسجيل الدخول برقم الجوال'
+      : "You'll sign in with your phone number";
 
   String get onboardingTagline =>
       isArabic ? 'وصل بدون تخمين' : 'Get there with less guesswork';
@@ -217,6 +222,8 @@ class AppLocalizations {
   String get publicSection => isArabic ? 'عام' : 'Public';
 
   String get liveBadge => isArabic ? 'مباشر' : 'Live';
+  String get etaUnit => isArabic ? 'دقيقة' : 'min';
+  String get etaNow => isArabic ? 'الآن' : 'Now';
 
   String get noLiveBuses =>
       isArabic ? 'لا يوجد باص حالياً' : 'No bus available';

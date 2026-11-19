@@ -273,7 +273,7 @@ export async function updateEmployeeMembership(
   }
 
   if (patch.appRole === "driver") {
-    driverId = await ensureDriverRecord(businessId, driverId, name, phone);
+    throw new Error("تعيين السائق يتم من صفحة الخط، باختيار الباص.");
   } else if (patch.phone?.trim() && driverId && role === "driver") {
     driverId = await ensureDriverRecord(businessId, driverId, name, phone);
   } else if (

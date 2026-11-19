@@ -13,6 +13,7 @@ import type {
 import { COLLECTIONS, isAdminPanelRole, phoneCandidates, requireSaudiMobile } from "@tardadi/shared";
 import { admin, db } from "../firebase";
 import { syncCustomClaims, loadAuthenticatedUser } from "../auth/firebaseAuth";
+import { saveDriverAssignment } from "./driverAssignment";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -856,6 +857,23 @@ export async function executeBulkImport(
       const membershipRole = row.role ?? "employee";
       const passengerAccess = row.passengerAccess ?? true;
       const driverAccess = row.driverAccess ?? membershipRole === "driver";
+      let accountUid: string | null = existing?.uid ?? null;
+
+      const attachDriver = async () => {
+        if (!driverAccess || !row.phone?.trim() || !accountUid) return;
+        const saved = await saveDriverAssignment(db, {
+          businessId,
+          name: row.displayName || row.phone,
+          phone: row.phone,
+          allowUnassigned: true,
+        });
+        await db
+          .collection(COLLECTIONS.users)
+          .doc(accountUid)
+          .collection(COLLECTIONS.memberships)
+          .doc(businessId)
+          .set({ driverId: saved.driverId, driverAccess: true }, { merge: true });
+      };
 
       if (existing) {
         const membershipRef = db
@@ -871,6 +889,7 @@ export async function executeBulkImport(
             driverAccess !== (current.driverAccess ?? current.role === "driver") ||
             passengerAccess !== (current.passengerAccess ?? current.role !== "driver");
           if (!roleChanged) {
+            await attachDriver();
             result.skipped += 1;
             result.details.push({
               email: row.email,
@@ -891,6 +910,7 @@ export async function executeBulkImport(
             source: current.source ?? "bulk_import",
           });
           await storeBeneficiaryPhone(existing.uid, row.phone, businessId);
+          await attachDriver();
           result.updated += 1;
           result.details.push({ email: row.email, phone: row.phone, status: "updated" });
           continue;
@@ -909,6 +929,7 @@ export async function executeBulkImport(
           driverAccess,
         });
         await storeBeneficiaryPhone(existing.uid, row.phone, businessId);
+        await attachDriver();
         if (row.email) {
           const hasPassword = await userHasPassword(row.email);
           if (!hasPassword) await sendPasswordSetupLink(row.email);
@@ -920,7 +941,7 @@ export async function executeBulkImport(
 
       const primaryRole =
         driverAccess && !passengerAccess ? "driver" : "employee";
-      const { created } = await createOrLinkUser({
+      const { created, uid } = await createOrLinkUser({
         email: row.email,
         phone: row.phone,
         displayName: row.displayName,
@@ -934,6 +955,8 @@ export async function executeBulkImport(
         passengerAccess,
         driverAccess,
       });
+      accountUid = uid;
+      await attachDriver();
 
       if (row.email) {
         const hasPassword = await userHasPassword(row.email);

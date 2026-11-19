@@ -139,6 +139,8 @@ class BusModel {
   const BusModel({
     required this.busId,
     required this.label,
+    this.labelAr,
+    this.labelEn,
     required this.plateNo,
     required this.status,
     this.currentLocation,
@@ -152,6 +154,8 @@ class BusModel {
 
   final String busId;
   final String label;
+  final String? labelAr;
+  final String? labelEn;
   final String plateNo;
   final String status;
   final GeoPoint? currentLocation;
@@ -167,6 +171,8 @@ class BusModel {
     return BusModel(
       busId: json['busId'] as String? ?? json['id'] as String? ?? '',
       label: json['label'] as String? ?? '',
+      labelAr: json['labelAr'] as String?,
+      labelEn: json['labelEn'] as String?,
       plateNo: json['plateNo'] as String? ?? '',
       status: json['status'] as String? ?? 'active',
       currentLocation: location == null
@@ -183,6 +189,10 @@ class BusModel {
       lastArrivedStopId: json['lastArrivedStopId'] as String?,
     );
   }
+
+  /// Bus name in the app's language (auto-translated by the API when needed).
+  String displayLabel({required bool arabic}) =>
+      _pick(label, arabic ? labelAr : labelEn);
 
   bool get isLive {
     if (lastSeenAt == null) return false;
@@ -202,6 +212,7 @@ class DriverModel {
     this.assignedBusId,
     required this.status,
     this.nameAr,
+    this.nameEn,
     this.businessId,
   });
 
@@ -213,7 +224,12 @@ class DriverModel {
   final String? assignedBusId;
   final String status;
   final String? nameAr;
+  final String? nameEn;
   final String? businessId;
+
+  /// Driver name in the app's language (auto-translated by the API when needed).
+  String displayName({required bool arabic}) =>
+      _pick(name, arabic ? nameAr : nameEn);
 
   factory DriverModel.fromJson(Map<String, dynamic> json) {
     return DriverModel(
@@ -225,6 +241,7 @@ class DriverModel {
       assignedBusId: json['assignedBusId'] as String?,
       status: json['status'] as String? ?? 'active',
       nameAr: json['nameAr'] as String?,
+      nameEn: json['nameEn'] as String?,
       businessId: json['businessId'] as String? ??
           json['organizationId'] as String?,
     );

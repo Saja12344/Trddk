@@ -140,8 +140,8 @@ export default function BusinessDetailPage() {
               <Link href="/routes" className="btn btn-sm">
                 إدارة الخطوط
               </Link>
-              <Link href="/drivers" className="btn btn-sm">
-                إدارة السائقين
+              <Link href="/operations?tab=now" className="btn btn-sm">
+                التشغيل
               </Link>
             </div>
           )}

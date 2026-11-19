@@ -4,6 +4,7 @@ import { db } from "../firebase";
 import { signDriverSessionToken } from "../auth/driverAccess";
 import { withBusinessId } from "../auth/scope";
 import { businessRef } from "../business/helpers";
+import { translateNames, withTranslatedNames } from "./translate";
 
 export interface DriverSessionPayload {
   driver: Driver;
@@ -96,11 +97,29 @@ export async function loadDriverSessionFromBusiness(
     ? null
     : activeTripSnapshot.docs[0].id;
 
+  const [translatedRoute] = await withTranslatedNames([
+    route as unknown as Record<string, unknown>,
+  ]);
+  const translatedStops = await withTranslatedNames(
+    stops as unknown as Record<string, unknown>[]
+  );
+  const names = await translateNames([driver.name, bus.label]);
+  const driverNames = names.get(driver.name.trim());
+  const busNames = names.get(bus.label.trim());
+
   return {
-    driver,
-    bus,
-    route,
-    stops,
+    driver: {
+      ...driver,
+      nameAr: driverNames?.ar,
+      nameEn: driverNames?.en,
+    } as Driver,
+    bus: {
+      ...bus,
+      labelAr: busNames?.ar,
+      labelEn: busNames?.en,
+    } as Bus,
+    route: translatedRoute as unknown as Route,
+    stops: translatedStops as unknown as Stop[],
     tripId,
     sessionToken: signDriverSessionToken(
       driver.driverId,

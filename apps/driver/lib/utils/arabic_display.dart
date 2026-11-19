@@ -16,10 +16,15 @@ class ArabicDisplay {
     BuildContext context, {
     required String name,
     String? nameAr,
+    String? nameEn,
   }) {
+    final translated = _translated(
+      context,
+      nameAr: nameAr,
+      nameEn: nameEn,
+    );
+    if (translated != null) return translated;
     if (!AppLocalizations.of(context).isArabic) return name;
-    final ar = nameAr?.trim();
-    if (ar != null && ar.isNotEmpty) return ar;
     return _transliterateName(name.trim());
   }
 
@@ -28,14 +33,32 @@ class ArabicDisplay {
     BuildContext context, {
     required String name,
     String? nameAr,
+    String? nameEn,
   }) {
+    final translated = _translated(
+      context,
+      nameAr: nameAr,
+      nameEn: nameEn,
+    );
+    if (translated != null) return translated;
     if (!AppLocalizations.of(context).isArabic) return name;
-    final ar = nameAr?.trim();
-    if (ar != null && ar.isNotEmpty) return ar;
     final trimmed = name.trim();
     if (trimmed.isEmpty) return trimmed;
     if (containsArabic(trimmed)) return trimmed;
     return _translatePlaceWords(_transliterateName(trimmed));
+  }
+
+  /// API translation for the current language, when one was provided.
+  static String? _translated(
+    BuildContext context, {
+    String? nameAr,
+    String? nameEn,
+  }) {
+    final preferred =
+        AppLocalizations.of(context).isArabic ? nameAr : nameEn;
+    final value = preferred?.trim();
+    if (value == null || value.isEmpty) return null;
+    return value;
   }
 
   static String _transliterateName(String latin) {
@@ -175,9 +198,27 @@ const _placeTerms = <String, String>{
 };
 
 extension ArabicDisplayContext on BuildContext {
-  String displayPersonName(String name, {String? nameAr}) =>
-      ArabicDisplay.personName(this, name: name, nameAr: nameAr);
+  String displayPersonName(
+    String name, {
+    String? nameAr,
+    String? nameEn,
+  }) =>
+      ArabicDisplay.personName(
+        this,
+        name: name,
+        nameAr: nameAr,
+        nameEn: nameEn,
+      );
 
-  String displayPlaceName(String name, {String? nameAr}) =>
-      ArabicDisplay.placeName(this, name: name, nameAr: nameAr);
+  String displayPlaceName(
+    String name, {
+    String? nameAr,
+    String? nameEn,
+  }) =>
+      ArabicDisplay.placeName(
+        this,
+        name: name,
+        nameAr: nameAr,
+        nameEn: nameEn,
+      );
 }

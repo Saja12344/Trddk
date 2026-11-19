@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:tardadi_core/tardadi_core.dart';
 
@@ -121,11 +122,18 @@ String passengerSmsError(Object error, AppLocalizations l10n) {
 }
 
 String passengerSmsErrorBody(Object error, AppLocalizations l10n) {
-  final raw = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+  var raw = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
   final firebaseCode = error is FirebaseAuthException ? error.code : '';
   String withCode(String message, String code) {
-    if (code.isEmpty) return message;
-    return '$message\n($code)';
+    if (code.isNotEmpty) debugPrint('passenger phone login error: $code');
+    if (kDebugMode && code.isNotEmpty) return '$message\n($code)';
+    return message;
+  }
+
+  final trailing = RegExp(r'\n\(([^)\n]+)\)\s*$').firstMatch(raw);
+  final trailingCode = trailing?.group(1) ?? '';
+  if (trailing != null) {
+    raw = raw.substring(0, trailing.start);
   }
 
   if (raw.contains('تعذّر إرسال رمز التحقق') ||
@@ -157,6 +165,9 @@ String passengerSmsErrorBody(Object error, AppLocalizations l10n) {
       firebaseCode == 'captcha-check-failed') {
     return withCode(l10n.otpSendFailed, firebaseCode);
   }
-  if (raw.trim().isEmpty) return withCode(l10n.otpSendFailed, firebaseCode);
-  return firebaseCode.isEmpty ? raw.trim() : '$raw\n($firebaseCode)';
+  final visible = raw.trim();
+  final code = firebaseCode.isNotEmpty ? firebaseCode : trailingCode;
+  if (visible.isEmpty) return withCode(l10n.otpSendFailed, code);
+  if (code.isNotEmpty) return withCode(visible, code);
+  return visible;
 }

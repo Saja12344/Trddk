@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -106,9 +105,14 @@ class _MapScreenState extends State<MapScreen>
       return context.displayPlaceName(
         routeName,
         nameAr: _session.route.nameAr,
+        nameEn: _session.route.nameEn,
       );
     }
-    return _session.bus.label;
+    return context.displayPlaceName(
+      _session.bus.label,
+      nameAr: _session.bus.labelAr,
+      nameEn: _session.bus.labelEn,
+    );
   }
 
   Color get _routeColor => _colorFromHex(_session.route.colorHex);
@@ -171,11 +175,22 @@ class _MapScreenState extends State<MapScreen>
     super.dispose();
   }
 
+  bool _routeNamesAreTranslated(RouteModel route) {
+    bool hasBoth(String? ar, String? en) =>
+        (ar?.trim().isNotEmpty ?? false) && (en?.trim().isNotEmpty ?? false);
+    bool placeReady(LocationPlace? place) =>
+        place == null || hasBoth(place.addressAr, place.addressEn);
+    return hasBoth(route.nameAr, route.nameEn) &&
+        placeReady(route.fromLocation) &&
+        placeReady(route.toLocation);
+  }
+
   Future<void> _refreshRouteDetail() async {
     final session = SessionStore.instance.session;
     if (session == null) return;
     if (session.route.polyline?.isNotEmpty == true &&
-        session.route.fromLocation != null) {
+        session.route.fromLocation != null &&
+        _routeNamesAreTranslated(session.route)) {
       return;
     }
 
@@ -914,6 +929,7 @@ class _MapScreenState extends State<MapScreen>
                       route: context.displayPlaceName(
                         session.route.name,
                         nameAr: session.route.nameAr,
+                        nameEn: session.route.nameEn,
                       ),
                       vehicle: l10n.vehicleLabel(_selectedVehicle),
                     ),
@@ -1118,36 +1134,44 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = canStart ? DriverColors.green : DriverColors.orange;
-    return Container(
-      width: 244,
-      height: 38,
-      decoration: BoxDecoration(
-        color: canStart ? const Color(0xFF244C50) : const Color(0xFF5E5480),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 20,
-            height: 16,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(999),
+    final accent = canStart ? DriverColors.green : DriverColors.orange;
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 244, minHeight: 40),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: accent.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              canStart ? Icons.check_circle_rounded : Icons.place_rounded,
+              size: 18,
+              color: accent,
             ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            canStart ? context.l10n.youCanStart : context.l10n.goCloserToStart,
-            style: TextStyle(
-              color: color,
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                canStart
+                    ? context.l10n.youCanStart
+                    : context.l10n.goCloserToStart,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1384,89 +1408,6 @@ class _SwipeArrivedButtonState extends State<_SwipeArrivedButton> {
   }
 }
 
-class _RadarPainter extends CustomPainter {
-  const _RadarPainter({required this.rotation});
-
-  final double rotation;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final maxRadius = size.width / 2;
-    final ringPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = Colors.white.withValues(alpha: 0.28);
-
-    for (var i = 1; i <= 4; i++) {
-      canvas.drawCircle(center, maxRadius * i / 4, ringPaint);
-    }
-
-    final axisPaint = Paint()
-      ..strokeWidth = 0.8
-      ..color = Colors.white.withValues(alpha: 0.14);
-    canvas.drawLine(
-      Offset(0, center.dy),
-      Offset(size.width, center.dy),
-      axisPaint,
-    );
-    canvas.drawLine(
-      Offset(center.dx, 0),
-      Offset(center.dx, size.height),
-      axisPaint,
-    );
-
-    final sweepPaint = Paint()
-      ..shader = SweepGradient(
-        colors: [
-          const Color(0xFF5D91FF).withValues(alpha: 0),
-          const Color(0xFF5D91FF).withValues(alpha: 0.72),
-        ],
-        stops: const [0.08, 1],
-        transform: const GradientRotation(math.pi / 2),
-      ).createShader(Offset.zero & size);
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(rotation);
-    canvas.translate(-center.dx, -center.dy);
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: maxRadius * 0.95),
-      0,
-      math.pi / 2,
-      true,
-      sweepPaint,
-    );
-    canvas.restore();
-
-    final pinPaint = Paint()..color = DriverColors.orange;
-    final headCenter = Offset(center.dx, center.dy - 10);
-    const headRadius = 22.0;
-
-    // Pin tail
-    final tail = Path()
-      ..moveTo(headCenter.dx - 14, headCenter.dy + 10)
-      ..lineTo(headCenter.dx, center.dy + 34)
-      ..lineTo(headCenter.dx + 14, headCenter.dy + 10)
-      ..close();
-    canvas.drawPath(tail, pinPaint);
-
-    // Pin head
-    canvas.drawCircle(headCenter, headRadius, pinPaint);
-
-    // Inner hole (white, like map pin)
-    canvas.drawCircle(
-      headCenter,
-      9,
-      Paint()..color = Colors.white.withValues(alpha: 0.92),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RadarPainter oldDelegate) {
-    return oldDelegate.rotation != rotation;
-  }
-}
-
 class _RouteStopsPreview extends StatelessWidget {
   const _RouteStopsPreview({
     required this.route,
@@ -1476,11 +1417,17 @@ class _RouteStopsPreview extends StatelessWidget {
   final RouteModel route;
   final List<StopModel> stops;
 
-  String _label(BuildContext context, String en, String? ar) {
-    if (ar != null && ar.trim().isNotEmpty) {
-      return context.displayPlaceName(en, nameAr: ar);
-    }
-    return en;
+  String _label(
+    BuildContext context,
+    String original, {
+    String? nameAr,
+    String? nameEn,
+  }) {
+    return context.displayPlaceName(
+      original,
+      nameAr: nameAr,
+      nameEn: nameEn,
+    );
   }
 
   @override
@@ -1492,7 +1439,12 @@ class _RouteStopsPreview extends StatelessWidget {
     if (from != null) {
       items.add((
         title: l10n.mapStart,
-        subtitle: _label(context, from.address, from.addressAr),
+        subtitle: _label(
+          context,
+          from.address,
+          nameAr: from.addressAr,
+          nameEn: from.addressEn,
+        ),
         color: DriverMapConfig.startGreen,
       ));
     }
@@ -1501,7 +1453,12 @@ class _RouteStopsPreview extends StatelessWidget {
       final stop = stops[i];
       items.add((
         title: '${l10n.mapStart == 'Start' ? 'Stop' : 'محطة'} ${i + 1}',
-        subtitle: _label(context, stop.name, stop.nameAr),
+        subtitle: _label(
+          context,
+          stop.name,
+          nameAr: stop.nameAr,
+          nameEn: stop.nameEn,
+        ),
         color: DriverColors.orange,
       ));
     }
@@ -1510,7 +1467,12 @@ class _RouteStopsPreview extends StatelessWidget {
     if (to != null) {
       items.add((
         title: l10n.mapEnd,
-        subtitle: _label(context, to.address, to.addressAr),
+        subtitle: _label(
+          context,
+          to.address,
+          nameAr: to.addressAr,
+          nameEn: to.addressEn,
+        ),
         color: DriverMapConfig.endRed,
       ));
     }
@@ -1524,7 +1486,7 @@ class _RouteStopsPreview extends StatelessWidget {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final item = items[index];
           return Row(

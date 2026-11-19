@@ -10,11 +10,10 @@ type Props = {
   onAdded?: () => void;
 };
 
-type AppRole = "passenger" | "driver" | "admin";
+type AppRole = "passenger" | "admin";
 
 const ROLES: { id: AppRole; label: string }[] = [
   { id: "passenger", label: "راكب" },
-  { id: "driver", label: "سائق" },
   { id: "admin", label: "أدمن" },
 ];
 
@@ -51,32 +50,29 @@ export function AddBeneficiaryForm({ businessId, onAdded }: Props) {
           phone: normalizedPhone,
           email: email.trim() || undefined,
           displayName: name.trim(),
-          primaryRole: role === "admin" ? "business_admin" : role === "driver" ? "driver" : "employee",
-          membershipRole:
-            role === "admin" ? "business_admin" : role === "driver" ? "driver" : "employee",
+          primaryRole: role === "admin" ? "business_admin" : "employee",
+          membershipRole: role === "admin" ? "business_admin" : "employee",
           businessId,
         }),
       });
 
-      if (role === "driver" || role === "admin") {
+      if (role === "admin") {
         await adminFetch(`/api/businesses/${businessId}/employees/${created.uid}`, {
           method: "PATCH",
           body: JSON.stringify({
             phone: normalizedPhone,
             appRole: role,
             passengerAccess: false,
-            driverAccess: role === "driver",
-            ...(role === "admin" && email.trim() ? { email: email.trim() } : {}),
+            driverAccess: false,
+            ...(email.trim() ? { email: email.trim() } : {}),
           }),
         });
       }
 
       setSuccess(
-        role === "driver"
-          ? "تمت إضافة السائق. يظهر هنا ويمكن تعيين الخط والباص من التعديل."
-          : role === "admin"
-            ? "تمت إضافة الأدمن. يدخل لوحة الإدارة بالبريد."
-            : "تمت إضافة الراكب. يسجّل دخوله في التطبيق برقم الجوال."
+        role === "admin"
+          ? "تمت إضافة الأدمن. يدخل لوحة الإدارة بالبريد."
+          : "تمت إضافة الراكب. يسجّل دخوله في التطبيق برقم الجوال."
       );
       setName("");
       setPhone("");
@@ -94,8 +90,8 @@ export function AddBeneficiaryForm({ businessId, onAdded }: Props) {
     <form className="card" onSubmit={handleSubmit}>
       <h3>إضافة مستفيد</h3>
       <p className="muted">
-        الرقم يسجّل كراكب أو سائق أو أدمن. الدخول للتطبيق برقم الجوال، ودخول
-        الأدمن للوحة الإدارة بالبريد.
+        الرقم يسجّل كراكب أو أدمن. السائق يُضاف من صفحة الخط. الدخول للتطبيق
+        برقم الجوال، ودخول الأدمن للوحة الإدارة بالبريد.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}

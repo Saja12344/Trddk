@@ -44,7 +44,9 @@ class AppLocalizations {
       'logOut': 'Log out',
       'save': 'Save',
       'languageSaved': 'Language updated',
-      'chooseVehicle': 'Choose Your vehicle',
+      'chooseVehicle': 'Choose your vehicle',
+      'chooseVehicleHint': 'You can change it later from the menu',
+      'change': 'Change',
       'next': 'Next',
       'selectAssignedVehicle': 'Select your assigned vehicle',
       'currentAssignedVehicle': 'Current assigned vehicle',
@@ -166,6 +168,8 @@ class AppLocalizations {
       'save': 'حفظ',
       'languageSaved': 'تم تحديث اللغة',
       'chooseVehicle': 'اختر مركبتك',
+      'chooseVehicleHint': 'يمكنك تغييرها لاحقًا من القائمة',
+      'change': 'تغيير',
       'next': 'التالي',
       'selectAssignedVehicle': 'اختر المركبة المعيّنة لك',
       'currentAssignedVehicle': 'المركبة المعيّنة حالياً',
@@ -298,6 +302,8 @@ class AppLocalizations {
   String get save => _t('save');
   String get languageSaved => _t('languageSaved');
   String get chooseVehicle => _t('chooseVehicle');
+  String get chooseVehicleHint => _t('chooseVehicleHint');
+  String get change => _t('change');
   String get next => _t('next');
   String get selectAssignedVehicle => _t('selectAssignedVehicle');
   String get currentAssignedVehicle => _t('currentAssignedVehicle');

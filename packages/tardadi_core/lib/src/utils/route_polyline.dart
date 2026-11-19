@@ -130,6 +130,7 @@ RouteModel reverseRouteModel(RouteModel route) {
         ? encodeRoutePolyline(points.reversed.toList())
         : route.polyline,
     nameAr: route.nameAr,
+    nameEn: route.nameEn,
     stopsCount: route.stopsCount,
     activeBusCount: route.activeBusCount,
     liveBusCount: route.liveBusCount,
@@ -149,6 +150,7 @@ List<StopModel> reverseStops(List<StopModel> stops) {
         longitude: reversed[i].longitude,
         sequenceNo: i + 1,
         nameAr: reversed[i].nameAr,
+        nameEn: reversed[i].nameEn,
       ),
   ];
 }
