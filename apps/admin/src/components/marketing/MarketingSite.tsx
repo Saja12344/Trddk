@@ -270,10 +270,10 @@ export default function MarketingSite({ locale }: { locale: MarketingLocale }) {
                 </div>
                 <figure className="mkt-phones">
                   <img
-                    src="/marketing/driver-phones.png?v=20261109"
+                    src="/marketing/driver-phones.png?v=20261125"
                     alt={t.driverSigninAlt}
-                    width={1024}
-                    height={814}
+                    width={1600}
+                    height={1168}
                     loading="lazy"
                     decoding="async"
                   />
