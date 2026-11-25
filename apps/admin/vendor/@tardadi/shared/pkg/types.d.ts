@@ -126,7 +126,11 @@ export interface Bus {
     organizationId: string;
     plateNo: string;
     label: string;
+    labelAr?: string;
+    labelEn?: string;
     status: EntityStatus;
+    /** The one route this bus runs. Drivers copy this onto assignedRouteId. */
+    routeId?: string | null;
     currentTripId?: string | null;
     currentLocation?: GeoPoint | null;
     lastSeenAt?: string | null;
